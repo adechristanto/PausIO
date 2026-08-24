@@ -1,0 +1,94 @@
+[graph]
+# cargo-deny checks the full dependency graph from all workspace members.
+targets = []
+
+# ── Advisories ───────────────────────────────────────────────────────────────
+[advisories]
+# Deny crates with known security vulnerabilities (active CVEs in the RustSec
+# advisory DB). `unmaintained` crates are a warning, not an error, because
+# upstream Tauri plugins sometimes lag behind the advisory database temporarily.
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+version = 2
+ignore = [
+  # gtk-rs GTK3 bindings (RUSTSEC-2024-0411 through -0420) are unmaintained.
+  # Tauri v2 on Linux has a hard dependency on GTK3 via wry/webkit2gtk; there
+  # is no migration path short of Tauri itself moving to GTK4. These are
+  # maintenance-status advisories, not known vulnerabilities. Revisit when
+  # Tauri ships a GTK4 backend.
+  "RUSTSEC-2024-0411",
+  "RUSTSEC-2024-0412",
+  "RUSTSEC-2024-0413",
+  "RUSTSEC-2024-0414",
+  "RUSTSEC-2024-0415",
+  "RUSTSEC-2024-0416",
+  "RUSTSEC-2024-0417",
+  "RUSTSEC-2024-0418",
+  "RUSTSEC-2024-0419",
+  "RUSTSEC-2024-0420",
+  # `unic-ucd-version` is unmaintained, reached via urlpattern -> tauri-utils.
+  # No safe upgrade exists upstream yet; tracked by the Tauri project.
+  "RUSTSEC-2025-0098",
+  # The rest of the `unic-*` family (same urlpattern -> tauri-utils path) and
+  # `proc-macro-error` (via tauri-plugin-store's toml chain) are unmaintained.
+  # Maintenance-status advisories only; no known vulnerabilities. Revisit when
+  # Tauri migrates off these transitive dependencies.
+  "RUSTSEC-2025-0075",
+  "RUSTSEC-2025-0080",
+  "RUSTSEC-2025-0081",
+  "RUSTSEC-2025-0100",
+  "RUSTSEC-2024-0370",
+]
+
+# ── Licenses ─────────────────────────────────────────────────────────────────
+[licenses]
+version = 2
+# Permissive licenses accepted across the whole workspace.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "CC0-1.0",
+  "Zlib",
+  # MPL-2.0 is weak, file-level copyleft. It arrives via Servo's cssparser
+  # family, which Tauri's wry/tao stack depends on. It is compatible with
+  # GPL-3.0 distribution and requires no relicensing of our code.
+  "MPL-2.0",
+]
+# GPL-3.0-only is expected on first-party crates only. Any transitive
+# dependency claiming GPL would be a supply-chain problem.
+exceptions = [
+  { allow = ["GPL-3.0-only"], name = "pausio" },
+  { allow = ["GPL-3.0-only"], name = "pausio-core" },
+  { allow = ["GPL-3.0-only"], name = "tauri-plugin-eyecare" },
+  { allow = ["MIT", "Apache-2.0"], name = "pausio-protocol" },
+]
+# Confidence threshold for license SPDX expression detection (0.0–1.0).
+confidence-threshold = 0.8
+
+# ── Bans ─────────────────────────────────────────────────────────────────────
+[bans]
+# Warn on duplicate versions of the same crate; the Tauri ecosystem is large
+# enough that some duplication is unavoidable, but flagging it keeps it visible.
+multiple-versions = "warn"
+# Path-only first-party workspace dependencies (e.g. `pausio-core = { path = ... }`)
+# are reported as wildcards by cargo-deny. They always resolve to the local crate,
+# so they are intentional. Registry wildcard (`*`) version requirements remain
+# unacceptable, but none exist in this workspace's manifests.
+wildcards = "allow"
+# No known crates to deny or skip version-dedup for at this time.
+deny = []
+skip = []
+skip-tree = []
+
+# ── Sources ──────────────────────────────────────────────────────────────────
+[sources]
+# Only allow crates from crates.io and local workspace paths.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

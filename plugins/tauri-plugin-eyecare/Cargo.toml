@@ -1,0 +1,27 @@
+[package]
+name = "tauri-plugin-eyecare"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+description = "PausIO's native mobile watch bridge"
+publish = false
+build = "build.rs"
+links = "tauri-plugin-eyecare"
+
+[lib]
+name = "tauri_plugin_eyecare"
+path = "src/lib.rs"
+
+[dependencies]
+pausio-protocol = { path = "../../crates/pausio-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", default-features = false }
+thiserror.workspace = true
+
+[build-dependencies]
+tauri-plugin = "2"

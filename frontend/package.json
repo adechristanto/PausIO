@@ -1,0 +1,30 @@
+{
+  "name": "@pausio/frontend",
+  "version": "0.1.0",
+  "description": "Svelte frontend for the PausIO local-first eye-break companion.",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "svelte": "^5.56.10"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@tauri-apps/cli": "^2.11.4",
+    "@testing-library/svelte": "^5.4.2",
+    "@types/node": "^24.13.3",
+    "jsdom": "^26.1.0",
+    "svelte-check": "^4.7.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  }
+}

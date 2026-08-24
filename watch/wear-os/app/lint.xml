@@ -1,0 +1,4 @@
+<lint>
+    <!-- Versions are pinned to the generated mobile-host toolchain. -->
+    <issue id="GradleDependency,NewerVersionAvailable,Typos,ObsoleteSdkInt,UseKtx" severity="ignore" />
+</lint>

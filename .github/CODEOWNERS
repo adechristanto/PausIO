@@ -1,0 +1,11 @@
+# Default review ownership. Branch protection must require code-owner review
+# before this file becomes an enforcement control.
+* @adechristanto
+
+# Release and security-sensitive surfaces.
+/.github/workflows/ @adechristanto
+/SECURITY.md @adechristanto
+/src-tauri/capabilities/ @adechristanto
+/src-tauri/capabilities-e2e/ @adechristanto
+/src-tauri/src/commands.rs @adechristanto
+/src-tauri/src/lib.rs @adechristanto

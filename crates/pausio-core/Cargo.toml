@@ -1,0 +1,17 @@
+[package]
+name = "pausio-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+description = "Deterministic timer engine for PausIO"
+publish = false
+
+[dependencies]
+chrono.workspace = true
+pausio-protocol = { path = "../pausio-protocol" }
+serde.workspace = true
+thiserror.workspace = true
