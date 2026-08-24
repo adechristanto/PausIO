@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Frontend: type check, unit tests, format check, bundle ───────────────
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm check && pnpm test && pnpm build
+
+  # ── Rust: format, clippy, unit tests, coverage ───────────────────────────
+  rust:
+    name: Rust
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.2
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-llvm-cov
+      # tauri::generate_context!() requires the built frontend at frontend/dist
+      - run: pnpm install --frozen-lockfile && pnpm build
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
+      - run: cargo llvm-cov -p pausio-core --lib --fail-under-lines 90 --summary-only
+
+  # ── Swift: Apple Watch unit tests ────────────────────────────────────────
+  swift:
+    name: Swift / Apple Watch
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: swift test
+        working-directory: watch/apple-watch
+
+  # ── Mobile host generation: determinism check ────────────────────────────
+  mobile-gen:
+    name: Mobile host generation
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.2
+          cache: pnpm
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+          targets: x86_64-linux-android, aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - run: brew install xcodegen
+      - run: sdkmanager "ndk;28.2.13676358"
+      - run: pnpm install --frozen-lockfile
+      - run: sh -n scripts/build-ios-simulator.sh scripts/generate-mobile.sh scripts/patch-mobile-projects.sh scripts/tauri.sh scripts/release-version.sh
+      - run: |
+          pnpm gen:mobile
+          shasum src-tauri/gen/apple/project.yml src-tauri/gen/android/settings.gradle src-tauri/gen/android/buildSrc/src/main/java/com/pausio/app/kotlin/BuildTask.kt > /tmp/pausio-mobile-first.sha
+          pnpm gen:mobile
+          shasum src-tauri/gen/apple/project.yml src-tauri/gen/android/settings.gradle src-tauri/gen/android/buildSrc/src/main/java/com/pausio/app/kotlin/BuildTask.kt > /tmp/pausio-mobile-second.sha
+          diff -u /tmp/pausio-mobile-first.sha /tmp/pausio-mobile-second.sha
+
+  # ── Desktop platform installers (Linux deb/appimage, Windows nsis/msi) ──
+  desktop-platform-builds:
+    name: Desktop build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+            bundle: deb,appimage
+          - name: Windows
+            os: windows-2025
+            bundle: nsis,msi
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.22.2
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.93.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Install Linux WebKit and tray build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Build the native installer
+        run: pnpm tauri build --debug --bundles ${{ matrix.bundle }}

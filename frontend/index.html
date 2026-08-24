@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f7fa" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      Stamps the view before first paint. App.svelte sets the same attribute,
+      but only once the bundle has loaded and mounted — too late for the rule
+      below, which decides what a break overlay paints on its very first frame.
+    -->
+    <script>
+      document.documentElement.dataset.windowView =
+        new URLSearchParams(window.location.search).get('view') || 'main'
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+    </style>
+    <title>PausIO</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

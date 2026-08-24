@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "wdio-desktop",
+  "description": "Desktop-only permissions for the opt-in WebdriverIO E2E bridge.",
+  "windows": ["main", "break-overlay-*"],
+  "platforms": ["macOS", "windows", "linux"],
+  "permissions": ["wdio:default", "wdio-webdriver:default"]
+}

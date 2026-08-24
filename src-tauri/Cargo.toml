@@ -1,0 +1,89 @@
+[package]
+name = "pausio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+description = "PausIO desktop and mobile application"
+publish = false
+
+[lib]
+name = "pausio_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+# Use bundled frontend assets for a simulator build. Without this, a debug
+# static library tries to load Vite's development server at localhost:1420.
+custom-protocol = ["tauri/custom-protocol"]
+# Compiles in the embedded WebDriver endpoint used by the wdio E2E suite.
+# Never enable this for a build a person will actually install: it exposes an
+# unauthenticated, localhost automation server that can execute arbitrary
+# JavaScript in the webview (and therefore call every #[tauri::command]) if
+# TAURI_WEBDRIVER_PORT is ever set in the process environment. Kept as an
+# opt-in Cargo feature — not just the env-var check — so release artifacts
+# never contain the capability at all.
+e2e-webdriver = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
+
+[[bin]]
+name = "pausio"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono.workspace = true
+pausio-core = { path = "../crates/pausio-core" }
+pausio-protocol = { path = "../crates/pausio-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-notification = "2"
+tauri-plugin-store = "2"
+thiserror.workspace = true
+tokio.workspace = true
+
+# Wearables are phone companions. Keep their bridge and its watch-envelope
+# dependencies out of every desktop artifact.
+[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+iana-time-zone.workspace = true
+tauri-plugin-eyecare = { path = "../plugins/tauri-plugin-eyecare" }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+# The Tauri wrapper currently exposes actionable notification categories only on
+# mobile. Use its desktop backend directly so due-break notifications can carry
+# Start/Postpone actions on Windows, macOS, and compatible Linux desktops.
+notify-rust = "4.18"
+# Keep the desktop process unique when it is launched both by the user and by
+# the operating system at login. This must be registered before other plugins.
+tauri-plugin-autostart = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+# The embedded WebDriver endpoint is desktop-only test tooling, compiled in
+# only under the `e2e-webdriver` feature, and even then registered only when
+# TAURI_WEBDRIVER_PORT is supplied by the E2E runner.
+tauri-plugin-wdio = { version = "1.2", optional = true }
+tauri-plugin-wdio-webdriver = { version = "1.2", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+mac-usernotifications = "0.3.1"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSSound", "NSWindow", "NSWorkspace", "block2"] }
+objc2-foundation = { version = "0.3", features = ["NSNotification", "NSOperation", "NSString", "block2"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Media_Audio",
+  "Win32_System_Com",
+  "Win32_System_LibraryLoader",
+  "Win32_System_RemoteDesktop",
+  "Win32_System_SystemInformation",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }

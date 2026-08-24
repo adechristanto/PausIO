@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "revision": 7,
+  "timezone": "Europe/Berlin",
+  "work_interval_seconds": 1200,
+  "short_break_seconds": 20,
+  "long_break_seconds": 300,
+  "pre_break_seconds": 30,
+  "active_days_mask": 62,
+  "active_start_minutes": 540,
+  "active_end_minutes": 1080,
+  "paused": false,
+  "updated_at": "2026-07-23T08:00:00Z",
+  "next_break_at": "2026-07-23T08:20:00Z",
+  "future_field": "ignored by v1 readers"
+}

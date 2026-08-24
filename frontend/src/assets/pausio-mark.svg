@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PausIO">
+  <!--
+    One shape, one meaning: the same eye the tray glyph draws (src-tauri/src/tray_icon.rs),
+    on a calm rounded-square field.
+
+    The lens is not freehand. `tray_icon.rs` defines the eye as a signed-distance band around
+    the intersection of two circles of radius 1.05 centred 0.62 above and below the icon's
+    centre, with a half-width of 0.115 — in normalised units. Multiplying those by 166 gives
+    every number below, so the app icon and the menu-bar glyph are the *same* outline at two
+    sizes rather than two drawings that resemble each other. Change one, recompute the other.
+
+    The band is a filled even-odd ring between the two level sets of that distance field
+    (radii 1.165 and 0.935) rather than a stroked path: at the two cusps a stroke would
+    either miter into spikes or round the tips off, and the level-set ring reproduces the
+    tray glyph's naturally pointed corners exactly.
+
+    The pupil is the one deliberate departure: the tray glyph's 0.30 radius (49.8 here) all
+    but touches the inner lens edge, which is right for an 18pt menu-bar mark that needs the
+    mass, and reads as a blob at logo scale. 44 keeps a visible ring of field around it.
+  -->
+  <defs>
+    <linearGradient id="field" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8AA6F6"/><stop offset=".52" stop-color="#5677D6"/><stop offset="1" stop-color="#33509F"/>
+    </linearGradient>
+    <!-- A single soft top-light, so the field reads as a surface rather than a flat swatch. -->
+    <radialGradient id="sheen" cx="200" cy="150" r="330" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".28"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="118" fill="url(#field)"/>
+  <rect width="512" height="512" rx="118" fill="url(#sheen)"/>
+  <!-- Inner hairline: catches the light at the top edge the way a physical bezel would. -->
+  <rect x="4.5" y="4.5" width="503" height="503" rx="113.5" fill="none" stroke="#FFFFFF" stroke-opacity=".22" stroke-width="9"/>
+
+  <g fill="#F7F9FF">
+    <path fill-rule="evenodd" d="M92.27 256A193.39 193.39 0 0 1 419.73 256A193.39 193.39 0 0 1 92.27 256ZM139.82 256A155.21 155.21 0 0 0 372.18 256A155.21 155.21 0 0 0 139.82 256Z"/>
+    <circle cx="256" cy="256" r="44"/>
+  </g>
+</svg>

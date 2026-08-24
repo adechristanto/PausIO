@@ -1,0 +1,16 @@
+[package]
+name = "pausio-protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+description = "Versioned language-neutral PausIO protocol contracts"
+publish = false
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true

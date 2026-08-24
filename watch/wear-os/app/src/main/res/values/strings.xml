@@ -1,0 +1,35 @@
+<resources>
+    <string name="app_name">PausIO</string>
+    <string name="notification_channel_pre_break">Break approaching</string>
+    <string name="notification_channel_break_due">Eye break due</string>
+    <string name="notification_pre_break_title">Your eye break is coming up</string>
+    <string name="notification_pre_break_body">Finish your thought, then look away.</string>
+    <string name="notification_break_title">Time for your eyes</string>
+    <string name="notification_break_body">Look into the distance for a moment.</string>
+    <string name="action_start_break">Start break</string>
+    <string name="action_pause">Pause reminders</string>
+    <string name="phone_sync">Phone sync r%1$d</string>
+    <string name="on_watch_defaults">On-watch 20 / 20 defaults</string>
+    <string name="precision_exact">Precise reminders enabled</string>
+    <string name="precision_inexact">Reminder timing may be delayed</string>
+    <string name="enable_notifications">Enable notifications</string>
+    <string name="wear_enable_alerts">Enable alerts</string>
+    <string name="enable_precise_reminders">Enable precise reminders</string>
+    <string name="end_break">End break</string>
+    <string name="wear_finish_break">Finish break</string>
+    <string name="phone_paused">Phone paused</string>
+    <string name="resume_reminders">Resume reminders</string>
+    <string name="wear_resume">Resume</string>
+    <string name="pause_reminders">Pause reminders</string>
+    <string name="start_break">Start break now</string>
+    <string name="wear_start_break">Break now</string>
+    <string name="test_haptic">Test haptic</string>
+    <string name="phase_dormant">Outside active hours</string>
+    <string name="phase_working">Focus time</string>
+    <string name="phase_pre_break">Break approaching</string>
+    <string name="phase_break_due">Break due</string>
+    <string name="phase_breaking">On break</string>
+    <string name="phase_paused">Reminders paused</string>
+    <string name="until_next_pause">Until next pause</string>
+    <string name="look_into_distance">Look into the distance</string>
+</resources>

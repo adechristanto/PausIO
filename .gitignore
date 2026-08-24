@@ -1,0 +1,57 @@
+node_modules/
+frontend/dist/
+target/
+src-tauri/target/
+src-tauri/gen/
+.gradle/
+**/build/
+**/.build/
+plugins/tauri-plugin-eyecare/.tauri/
+plugins/tauri-plugin-eyecare/android/.tauri/
+.DS_Store
+**/.DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+.cargo/credentials
+.cargo/credentials.toml
+src-tauri/capabilities/wdio-desktop.generated.json
+
+# Editor and IDE directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+*.profraw
+*.lcov
+artifacts/
+release-assets/
+DerivedData/
+*.xcarchive
+*.ipa
+*.apk
+
+# Agent / AI assistant local state and temporary caches
+.claude/settings.local.json
+.claude/worktrees/
+.kilo/
+.freebuff/
+
+# Local scratch and tool artifacts
+test.html
+.playwright-mcp/

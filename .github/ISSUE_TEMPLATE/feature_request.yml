@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement or new capability.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [open issues](https://github.com/adechristanto/PausIO/issues) and the [non-goals listed in CONTRIBUTING.md](https://github.com/adechristanto/PausIO/blob/main/CONTRIBUTING.md#non-goals--scope-boundaries) before filing.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation or friction that motivates this request.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see? Be as specific as you can.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      description: PausIO must not read application names, window titles, screen content, audio, camera, or keystrokes.
+      options:
+        - label: This feature does not require reading application names, window titles, URLs, screen content, audio, camera data, or keystrokes.
+          required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have considered
+      description: Other approaches you thought about, and why they are less suitable.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?

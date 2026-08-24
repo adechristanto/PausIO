@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.PausIO" parent="android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#000000</item>
+    </style>
+</resources>
