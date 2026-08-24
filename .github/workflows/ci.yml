@@ -94,7 +94,7 @@ jobs:
           components: rustfmt, clippy
           targets: x86_64-linux-android, aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
       - run: brew install xcodegen
       - run: sdkmanager "ndk;28.2.13676358"
       - run: pnpm install --frozen-lockfile
