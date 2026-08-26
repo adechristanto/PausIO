@@ -14,7 +14,7 @@
         "fullscreen": false,
         "visible": false,
         "transparent": true,
-        "shadow": true,
+        "shadow": false,
         "decorations": false
       }
     ]

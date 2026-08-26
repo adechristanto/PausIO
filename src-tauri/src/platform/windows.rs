@@ -1,5 +1,39 @@
 use pausio_protocol::ContextReason;
 
+#[cfg(any(target_os = "windows", test))]
+const DWM_COLOR_NONE: u32 = 0xFFFF_FFFE;
+
+/// Suppresses the DWM accent border as a second line of defense after the
+/// Windows configuration disables Tao's undecorated shadow. Tao documents that
+/// shadow as necessarily painting a thin line; DWM can also color the remaining
+/// resize frame on supported Windows 11 builds unless its color is explicitly
+/// set to the documented no-color sentinel.
+#[cfg(target_os = "windows")]
+pub(crate) fn configure_windows_main_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    use windows::Win32::Foundation::COLORREF;
+    use windows::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute};
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let handle = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        let Ok(hwnd) = handle.hwnd() else {
+            return;
+        };
+        let border_color = COLORREF(DWM_COLOR_NONE);
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                std::ptr::from_ref(&border_color).cast(),
+                std::mem::size_of_val(&border_color) as u32,
+            );
+        }
+    });
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) fn platform_idle_seconds() -> Option<u32> {
     use windows::Win32::System::SystemInformation::GetTickCount;
@@ -105,5 +139,15 @@ pub(crate) fn mark_fullscreen(hwnd: windows::Win32::Foundation::HWND, fullscreen
         if taskbar.HrInit().is_ok() {
             let _ = taskbar.MarkFullscreenWindow(hwnd, fullscreen);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DWM_COLOR_NONE;
+
+    #[test]
+    fn uses_the_documented_dwm_no_color_sentinel() {
+        assert_eq!(DWM_COLOR_NONE, 0xFFFF_FFFE);
     }
 }

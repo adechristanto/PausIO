@@ -21,6 +21,10 @@ describe('canvas color stays in sync across the shell, the document, and Rust', 
     expect(html).toContain('#0b0d12')
     expect(conf).toContain('"transparent": true')
     expect(conf).toContain('"shadow": true')
+    const appShell = css.match(/\.app-shell\s*\{([^}]*)\}/)?.[1]
+    expect(appShell).toContain('border-radius: var(--radius-lg);')
+    expect(appShell).toContain('box-shadow: var(--shadow);')
+    expect(appShell).not.toContain('border: 1px solid var(--line-optical);')
     // The prompt's webview must stay transparent while its notification-style card
     // slides in; otherwise the native window paints an opaque rectangle first.
     expect(breakWindows).toContain('Color(11, 13, 18, 0)')

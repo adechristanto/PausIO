@@ -303,6 +303,8 @@ pub fn run() {
                 sync_global_shortcuts(app.handle(), lock_engine(&engine.0).settings());
             }
             install_main_window_lifecycle(app.handle());
+            #[cfg(target_os = "windows")]
+            platform::windows::configure_windows_main_window(app.handle());
             #[cfg(target_os = "macos")]
             {
                 platform::macos::configure_macos_main_window(app.handle());
@@ -618,17 +620,17 @@ mod tests {
     /// `tauri.windows.conf.json` and `tauri.linux.conf.json` each replace the
     /// entire `app.windows[0]` entry wholesale (Tauri merges platform config
     /// via JSON Merge Patch, which does not deep-merge arrays) — the only
-    /// field that should legitimately differ from the base `tauri.conf.json`
-    /// is `decorations`, since both platforms render the same custom title
-    /// bar. This guards against a future edit (e.g. a resize) landing in only
-    /// one file and silently drifting from the others.
+    /// fields that should legitimately differ from the base `tauri.conf.json`
+    /// are native chrome controls. This guards against a future edit (e.g. a
+    /// resize) landing in only one file and silently drifting from the others.
     #[test]
     fn desktop_titlebar_platform_configs_share_the_same_window_geometry() {
         use serde_json::Value;
 
         // Fields that intentionally differ per platform because they control
         // native window chrome, not the custom titlebar strip.
-        const PLATFORM_SPECIFIC_FIELDS: &[&str] = &["decorations", "titleBarStyle", "hiddenTitle"];
+        const PLATFORM_SPECIFIC_FIELDS: &[&str] =
+            &["decorations", "hiddenTitle", "shadow", "titleBarStyle"];
 
         let read_main_window = |path: &str| -> Value {
             let text = std::fs::read_to_string(path)
@@ -663,5 +665,10 @@ mod tests {
         // that is the entire point of this override existing.
         assert_eq!(windows["decorations"], Value::Bool(false));
         assert_eq!(linux["decorations"], Value::Bool(false));
+        // Tao documents that its native shadow for an undecorated Windows window
+        // necessarily paints a thin 1px frame line. Disable that shadow on Windows;
+        // the rounded content remains, while macOS and Linux keep their native shadow.
+        assert_eq!(windows["shadow"], Value::Bool(false));
+        assert_eq!(linux["shadow"], Value::Bool(true));
     }
 }
