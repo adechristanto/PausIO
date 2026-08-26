@@ -269,7 +269,6 @@ svg {
   overflow: hidden;
   background: var(--canvas);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--line-optical);
   box-shadow: var(--shadow);
 }
 .app-shell.mobile-shell,
