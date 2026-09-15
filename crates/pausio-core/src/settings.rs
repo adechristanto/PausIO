@@ -57,22 +57,14 @@ pub struct Settings {
     /// retention periods are intentionally small and predictable.
     #[serde(default)]
     pub history_retention_days: Option<u16>,
-    /// Opt-in OS notification sound. Visual/text notifications remain
-    /// available even when sound is disabled.
+    /// Which lifecycle moments play `notification_sound_name`: the break-due
+    /// reminder surfacing (the persistent prompt, or the native notification
+    /// in quieter styles), the natural end of a break, both, or neither.
     #[serde(default)]
-    pub notification_sound: bool,
-    /// Which system sound to use when `notification_sound` is enabled —
-    /// covers both the OS notification chime and the short-break-end cue.
+    pub sound_timing: SoundTiming,
+    /// Which system sound to play at the moments selected by `sound_timing`.
     #[serde(default)]
     pub notification_sound_name: SystemSound,
-    /// A short, synthesized audio cue at the start and end of a break,
-    /// played by the webview — independent of `notification_sound`, which
-    /// only covers the OS notification chime.
-    #[serde(default)]
-    pub sound_theme: SoundTheme,
-    /// Percent volume (0-100) for `sound_theme`.
-    #[serde(default = "default_sound_volume")]
-    pub sound_volume: u8,
     /// Local clock minutes at which a short break becomes due. They are
     /// intentionally simple fixed-time reminders, not calendar data.
     #[serde(default)]
@@ -109,10 +101,6 @@ const fn default_blink_nudge_minutes() -> Option<u8> {
 
 fn default_end_break_shortcut() -> Option<String> {
     Some("CmdOrCtrl+Shift+P".to_string())
-}
-
-const fn default_sound_volume() -> u8 {
-    70
 }
 
 /// On by default: each signal reads only an aggregate OS state, so there is no
@@ -183,17 +171,18 @@ pub enum BreakRoutine {
     Posture,
 }
 
-/// A break start/end audio cue. These are synthesized on the fly in the
-/// webview (short oscillator tones), never bundled audio files, so there is
-/// nothing to license, ship, or fail to load.
+/// The lifecycle moments a break cue may play at. `Banner` is the moment a
+/// break-due reminder surfaces — the persistent prompt in Balanced delivery,
+/// or the native notification in the quieter styles; `End` is a break that
+/// ran its natural course (never a skipped one).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum SoundTheme {
-    Silence,
+pub enum SoundTiming {
+    Banner,
     #[default]
-    Chime,
-    Tone,
-    Click,
+    End,
+    Both,
+    Silent,
 }
 
 /// A native OS system sound, resolved to a platform-specific resource name
@@ -235,15 +224,13 @@ impl Default for Settings {
             break_routine: BreakRoutine::Guided,
             history_enabled: default_history_enabled(),
             history_retention_days: Some(365),
-            notification_sound: false,
+            sound_timing: SoundTiming::default(),
             notification_sound_name: SystemSound::Default,
             fixed_break_minutes: vec![],
             daily_focus_limit_minutes: None,
             end_break_shortcut: default_end_break_shortcut(),
             pause_toggle_shortcut: None,
             take_break_shortcut: None,
-            sound_theme: SoundTheme::default(),
-            sound_volume: default_sound_volume(),
             auto_detect_fullscreen: default_auto_detect(),
             auto_detect_do_not_disturb: default_auto_detect(),
         }
@@ -282,8 +269,6 @@ pub enum SettingsError {
         "a global shortcut must be a non-empty accelerator of 40 characters or fewer, or disabled"
     )]
     GlobalShortcut,
-    #[error("sound volume must be between 0 and 100")]
-    SoundVolume,
 }
 
 impl SettingsError {
@@ -306,7 +291,6 @@ impl SettingsError {
             SettingsError::FixedBreaks => "fixed_breaks",
             SettingsError::DailyFocusLimit => "daily_focus_limit",
             SettingsError::GlobalShortcut => "global_shortcut",
-            SettingsError::SoundVolume => "sound_volume",
         }
     }
 }
@@ -396,9 +380,6 @@ impl Settings {
             {
                 return Err(SettingsError::GlobalShortcut);
             }
-        }
-        if self.sound_volume > 100 {
-            return Err(SettingsError::SoundVolume);
         }
         Ok(())
     }

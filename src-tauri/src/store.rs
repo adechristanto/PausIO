@@ -32,8 +32,64 @@ pub(crate) fn load_settings_profiles(app: &AppHandle) -> ApiResult<SettingsProfi
     let store = app.store(settings_store_name()).map_err(internal_error)?;
     Ok(store
         .get(SETTINGS_PROFILES_KEY)
+        .map(|mut value| {
+            // Profiles store whole settings snapshots, so a profile saved
+            // before the unified sound model needs the same migration as the
+            // live settings document.
+            if let Some(object) = value.as_object_mut() {
+                for key in ["work", "home"] {
+                    if let Some(profile) = object.get_mut(key).and_then(|v| v.as_object_mut()) {
+                        let (migrated, _) = migrate_sound_timing(std::mem::replace(
+                            profile,
+                            serde_json::Map::new(),
+                        ));
+                        *profile = migrated;
+                    }
+                }
+            }
+            value
+        })
         .and_then(|value| serde_json::from_value::<SettingsProfiles>(value).ok())
         .unwrap_or_default())
+}
+
+/// One-time migration into the unified sound model: derives `sound_timing`
+/// from the retired `notification_sound` / `sound_theme` pair in a stored
+/// settings document that predates the field, and drops the retired keys so
+/// the next save is clean. Returns the (possibly rewritten) document and
+/// whether it changed. Idempotent — a document that already carries
+/// `sound_timing` is returned untouched.
+pub(crate) fn migrate_sound_timing(
+    mut object: serde_json::Map<String, serde_json::Value>,
+) -> (serde_json::Map<String, serde_json::Value>, bool) {
+    if object.contains_key("sound_timing") {
+        return (object, false);
+    }
+    let banner = object
+        .get("notification_sound")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    // A missing sound_theme predates even that field; its default was an
+    // audible break-end cue, matching "end".
+    let end = object
+        .get("sound_theme")
+        .and_then(|value| value.as_str())
+        .map(|theme| theme != "silence")
+        .unwrap_or(true);
+    let timing = match (banner, end) {
+        (true, true) => "both",
+        (true, false) => "banner",
+        (false, true) => "end",
+        (false, false) => "silent",
+    };
+    object.insert(
+        "sound_timing".to_string(),
+        serde_json::Value::String(timing.to_string()),
+    );
+    object.remove("notification_sound");
+    object.remove("sound_theme");
+    object.remove("sound_volume");
+    (object, true)
 }
 
 pub(crate) fn save_settings_profiles(

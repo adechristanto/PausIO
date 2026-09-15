@@ -2631,7 +2631,6 @@ dependencies = [
  "chrono",
  "iana-time-zone",
  "mac-usernotifications",
- "notify-rust",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
@@ -2661,6 +2660,7 @@ dependencies = [
  "chrono",
  "pausio-protocol",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
 ]
 

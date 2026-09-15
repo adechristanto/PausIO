@@ -1,25 +1,10 @@
 //! Plays a system sound directly, independent of any OS notification popup.
-//! Used for cues (like the short-break-end chime) that must be heard even
-//! when a full-screen break overlay — not a notification — is on screen.
-//! PausIO ships no bundled audio: every option below names a sound the
-//! operating system already owns.
+//! Used for cues (like the break-due banner and the break-end chime) that
+//! must be heard even when a PausIO window — not a notification — is on
+//! screen. PausIO ships no bundled audio: every option below names a sound
+//! the operating system already owns.
 
-#[cfg(target_os = "macos")]
-use pausio_core::SoundTheme;
 use pausio_core::SystemSound;
-
-#[cfg(target_os = "macos")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BreakSoundMoment {
-    /// No current call site: `events.rs` plays a cue only on `EngineEvent::Ended`,
-    /// by deliberate design ("the pause must have actually finished, not merely
-    /// started or been skipped early" -- see the comment at that call site).
-    /// Kept, with its `macos_break_sound_name` mapping below, in case a start cue
-    /// is ever added; not dead code to delete, just code with nothing calling it yet.
-    #[allow(dead_code)]
-    Start,
-    End,
-}
 
 /// Resolves a [`SystemSound`] to the sound name understood by
 /// `tauri-plugin-notification` on this platform, for attaching to an actual
@@ -82,30 +67,6 @@ fn macos_system_sound_name(sound: SystemSound) -> &'static str {
     }
 }
 
-/// Plays the configured break cue natively on macOS. The webview can be
-/// suspended while PausIO is tray-only, so Web Audio is not a reliable owner
-/// of a process-wide reminder there.
-#[cfg(target_os = "macos")]
-pub fn play_break_sound(theme: SoundTheme, volume: u8, moment: BreakSoundMoment) -> bool {
-    let Some(name) = macos_break_sound_name(theme, moment) else {
-        return true;
-    };
-    play_macos_named(name, f32::from(volume.min(100)) / 100.0)
-}
-
-#[cfg(target_os = "macos")]
-fn macos_break_sound_name(theme: SoundTheme, moment: BreakSoundMoment) -> Option<&'static str> {
-    match (theme, moment) {
-        (SoundTheme::Silence, _) => None,
-        (SoundTheme::Chime, BreakSoundMoment::Start) => Some("Glass"),
-        (SoundTheme::Chime, BreakSoundMoment::End) => Some("Hero"),
-        (SoundTheme::Tone, BreakSoundMoment::Start) => Some("Ping"),
-        (SoundTheme::Tone, BreakSoundMoment::End) => Some("Submarine"),
-        (SoundTheme::Click, BreakSoundMoment::Start) => Some("Tink"),
-        (SoundTheme::Click, BreakSoundMoment::End) => Some("Pop"),
-    }
-}
-
 #[cfg(target_os = "macos")]
 fn play_macos_named(name: &str, volume: f32) -> bool {
     use std::cell::RefCell;
@@ -161,15 +122,6 @@ fn play_windows(sound: SystemSound) -> bool {
     unsafe { PlaySoundW(PCWSTR(wide.as_mut_ptr()), None, SND_ALIAS | SND_ASYNC).as_bool() }
 }
 
-/// Plays the OS default system sound for a break that completed naturally.
-/// Windows has no per-theme break cues (unlike macOS's per-theme `NSSound`
-/// names) — every enabled `sound_theme` maps to this single OS default
-/// alert. Enablement (`sound_theme != Silence`) is checked by the caller.
-#[cfg(target_os = "windows")]
-pub fn play_break_end_sound() -> bool {
-    play_windows(SystemSound::Default)
-}
-
 #[cfg(target_os = "linux")]
 fn play_linux(sound: SystemSound) -> bool {
     use std::process::{Command, Stdio};
@@ -196,24 +148,4 @@ fn play_linux(sound: SystemSound) -> bool {
             .is_ok();
     }
     false
-}
-
-#[cfg(all(test, target_os = "macos"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_macos_break_theme_maps_to_an_installed_system_sound() {
-        for theme in [SoundTheme::Chime, SoundTheme::Tone, SoundTheme::Click] {
-            for moment in [BreakSoundMoment::Start, BreakSoundMoment::End] {
-                let name = macos_break_sound_name(theme, moment).unwrap();
-                let path = format!("/System/Library/Sounds/{name}.aiff");
-                assert!(std::path::Path::new(&path).is_file(), "missing {path}");
-            }
-        }
-        assert_eq!(
-            macos_break_sound_name(SoundTheme::Silence, BreakSoundMoment::Start),
-            None
-        );
-    }
 }

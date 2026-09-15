@@ -510,7 +510,7 @@ pub(crate) fn test_reminder(app: AppHandle, engine: State<'_, EngineState>) -> A
             let guard = lock_engine(&engine.0);
             (
                 guard.settings().locale,
-                crate::events::resolved_notification_sound(guard.settings()),
+                crate::events::reminder_cue(guard.settings()),
             )
         };
         crate::events::show_local_notification(

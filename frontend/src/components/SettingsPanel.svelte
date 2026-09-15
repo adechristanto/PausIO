@@ -29,7 +29,7 @@
     Settings,
     SettingsProfiles,
     Snapshot,
-    SoundTheme,
+    SoundTiming,
     SystemSound,
     Theme,
     WatchStatus,
@@ -164,10 +164,10 @@
       | 'strictness_firm_hint'
       | 'strictness_strict_hint'
   )
-  // Only Firm and Strict produce no interim surface at Due (events.rs:494). Balanced
-  // still sends an actionable "start now / postpone" notification, so it is not
-  // warningless even with the pre-break notice off -- the caution belongs to the two
-  // modes that genuinely cover the screen with nothing preceding it.
+  // Only Firm and Strict produce no interim surface at Due (events.rs). Balanced
+  // still raises its persistent prompt, so it is not warningless even with the
+  // pre-break notice off -- the caution belongs to the two modes that genuinely
+  // cover the screen with nothing preceding it.
   const noAdvanceNotice = $derived(
     settings.pre_break_seconds === 0 && (deliveryMode === 'cover' || deliveryMode === 'hold')
   )
@@ -328,29 +328,42 @@
         {/if}
       </div>
 
-      <div class="section-subheading">
-        <h3>{t('section_sound')}</h3>
-        {#if desktopHealth?.platform === 'windows'}
-          <p class="setting-note">{t('sound_windows_note')}</p>
-        {/if}
-      </div>
-      <div class="setting-list">
-        {#if !isMobile}
-          <label class="toggle-row">
+      {#if !isMobile}
+        <div class="section-subheading">
+          <h3>{t('section_sound')}</h3>
+          {#if desktopHealth?.platform === 'windows'}
+            <p class="setting-note">{t('sound_windows_note')}</p>
+          {/if}
+        </div>
+        <div class="setting-list">
+          <label class="select-row">
             <span
-              ><strong>{t('setting_notification_sound')}</strong><small
-                >{t('setting_notification_sound_hint')}</small
+              ><strong>{t('setting_sound_timing')}</strong><small
+                >{t('setting_sound_timing_hint')}</small
               ></span
             >
-            <input
-              type="checkbox"
-              role="switch"
-              checked={settings.notification_sound ?? false}
+            <select
+              value={settings.sound_timing ?? 'end'}
               onchange={(event) =>
-                editSettings({ ...settings!, notification_sound: event.currentTarget.checked })}
-            />
+                editSettings({
+                  ...settings!,
+                  sound_timing: event.currentTarget.value as SoundTiming,
+                })}
+            >
+              {#each ['banner', 'end', 'both', 'silent'] as timing}
+                <option value={timing}
+                  >{t(
+                    `sound_timing_${timing}` as
+                      | 'sound_timing_banner'
+                      | 'sound_timing_end'
+                      | 'sound_timing_both'
+                      | 'sound_timing_silent'
+                  )}</option
+                >
+              {/each}
+            </select>
           </label>
-          {#if settings.notification_sound ?? false}
+          {#if (settings.sound_timing ?? 'end') !== 'silent'}
             <label class="select-row">
               <span>{t('setting_notification_sound_name')}</span>
               <select
@@ -382,47 +395,8 @@
               >
             </label>
           {/if}
-        {/if}
-        <label class="select-row">
-          <span>{t('setting_sound_theme')}</span>
-          <select
-            value={settings.sound_theme ?? 'silence'}
-            onchange={(event) =>
-              editSettings({
-                ...settings!,
-                sound_theme: event.currentTarget.value as SoundTheme,
-              })}
-          >
-            {#each ['silence', 'chime', 'tone', 'click'] as theme}
-              <option value={theme}
-                >{t(
-                  `sound_theme_${theme}` as
-                    | 'sound_theme_silence'
-                    | 'sound_theme_chime'
-                    | 'sound_theme_tone'
-                    | 'sound_theme_click'
-                )}</option
-              >
-            {/each}
-          </select>
-        </label>
-        {#if (settings.sound_theme ?? 'silence') !== 'silence'}
-          <label class="range-control">
-            <span>{t('setting_sound_volume')}</span>
-            <output>{t('unit_percent', { value: settings.sound_volume ?? 70 })}</output>
-            <input
-              aria-label={t('setting_sound_volume')}
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={settings.sound_volume ?? 70}
-              oninput={(e) =>
-                editSettings({ ...settings!, sound_volume: Number(e.currentTarget.value) })}
-            />
-          </label>
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       <Advanced bind:open={advancedOpen}>
         <div class="stepper-row">

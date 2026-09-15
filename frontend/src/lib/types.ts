@@ -7,7 +7,7 @@ export type Accent = 'horizon' | 'sage' | 'amber' | 'lilac'
 export type Locale = 'en' | 'de'
 export type DisplayTarget = 'all' | 'active' | 'primary' | 'notification_only'
 export type BreakRoutine = 'guided' | 'quiet' | 'far_gaze' | 'blink' | 'posture'
-export type SoundTheme = 'silence' | 'chime' | 'tone' | 'click'
+export type SoundTiming = 'banner' | 'end' | 'both' | 'silent'
 export type SystemSound = 'default' | 'chime' | 'ding' | 'alert' | 'complete'
 export type ContextReason =
   'meeting' | 'screen_share' | 'fullscreen' | 'do_not_disturb' | 'active_input'
@@ -39,15 +39,13 @@ export interface Settings {
   break_routine?: BreakRoutine
   history_enabled?: boolean
   history_retention_days?: number | null
-  notification_sound?: boolean
+  sound_timing?: SoundTiming
   notification_sound_name?: SystemSound
   fixed_break_minutes?: number[]
   daily_focus_limit_minutes?: number | null
   end_break_shortcut?: string | null
   pause_toggle_shortcut?: string | null
   take_break_shortcut?: string | null
-  sound_theme?: SoundTheme
-  sound_volume?: number
   auto_detect_fullscreen?: boolean
   auto_detect_do_not_disturb?: boolean
   hydration_nudge_minutes?: number | null
@@ -77,7 +75,6 @@ export type SettingsErrorField =
   | 'fixed_breaks'
   | 'daily_focus_limit'
   | 'global_shortcut'
-  | 'sound_volume'
 export interface ApiError {
   code:
     | 'invalid_settings'

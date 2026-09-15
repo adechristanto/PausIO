@@ -30,12 +30,10 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   {
     category: 'breaks',
     advanced: false,
-    labelKey: 'setting_notification_sound',
-    hintKey: 'setting_notification_sound_hint',
+    labelKey: 'setting_sound_timing',
+    hintKey: 'setting_sound_timing_hint',
   },
   { category: 'breaks', advanced: false, labelKey: 'setting_notification_sound_name' },
-  { category: 'breaks', advanced: false, labelKey: 'setting_sound_theme' },
-  { category: 'breaks', advanced: false, labelKey: 'setting_sound_volume' },
   // Breaks -- behind "More settings"
   {
     category: 'breaks',

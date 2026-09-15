@@ -15,7 +15,6 @@
   import { pauseLabel, setLocale, t } from './lib/i18n'
   import { api } from './lib/pausio'
   import type { AnalyticsRange } from './lib/history-analytics'
-  import { playBreakSound } from './lib/sound'
   import { tooltip } from './lib/tooltip'
   import type {
     Accent,
@@ -31,7 +30,6 @@
     Settings,
     SettingsProfiles,
     Snapshot,
-    SoundTheme,
     Strictness,
     SystemSound,
     Theme,
@@ -699,7 +697,6 @@
   onMount(() => {
     let offTick: (() => void) | undefined
     let offState: (() => void) | undefined
-    let offBreakEnded: (() => void) | undefined
     let offBlinkNudge: (() => void) | undefined
     let offPostureNudge: (() => void) | undefined
     let offHydrationNudge: (() => void) | undefined
@@ -751,16 +748,9 @@
         // per-window UI. The main window's script keeps running even when
         // hidden to the tray, so it is the one place this must live — every
         // other window (overlay, prompt) would otherwise also
-        // fire the same sound or announcement in parallel.
+        // fire the same announcement in parallel. Break sounds are owned by
+        // the Rust shell natively on every platform.
         if (windowView === 'main') {
-          // The break cue is only ever heard once the pause has actually run
-          // its course — never at break:started, and never at break:skipped,
-          // which is an early exit rather than a completed pause.
-          offBreakEnded = await api.onBreakEnded(
-            () =>
-              settings &&
-              playBreakSound(settings.sound_theme ?? 'silence', settings.sound_volume ?? 70, 'end')
-          )
           offBlinkNudge = await api.onBlinkNudge(() => (announce = t('nudge_blink_announcement')))
           offPostureNudge = await api.onPostureNudge(
             () => (announce = t('nudge_posture_announcement'))
@@ -780,7 +770,6 @@
     return () => {
       offTick?.()
       offState?.()
-      offBreakEnded?.()
       offBlinkNudge?.()
       offPostureNudge?.()
       offHydrationNudge?.()

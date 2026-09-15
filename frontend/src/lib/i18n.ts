@@ -134,14 +134,14 @@ const english = {
   strictness_gentle_hint:
     "A quiet notification lets you know when it's due, and again once the break starts. Your screen is left alone \u2014 PausIO opens a window only if the notification cannot be shown.",
   strictness_balanced_hint:
-    "A notification asks you to start now or postpone. If you don't respond, a small prompt appears, then the break starts on its own.",
+    'A small floating prompt asks you to start now or postpone, and waits in the corner of your screen until you answer.',
   strictness_firm_hint:
     'The moment a break is due, a fullscreen reminder appears immediately — no notification first.',
   strictness_strict_hint:
     'A fullscreen reminder appears immediately, with no notification first. Quitting PausIO is disabled during breaks, but an emergency exit is always available.',
   setting_delivery_mode: 'How breaks appear',
   delivery_mode_notify: 'Just notify me',
-  delivery_mode_ask: 'Ask first, then cover the screen',
+  delivery_mode_ask: 'Ask first, with a floating prompt',
   delivery_mode_cover: 'Cover the screen right away',
   delivery_mode_hold: 'Cover the screen and hold it',
   delivery_no_notice_warning:
@@ -178,8 +178,13 @@ const english = {
   setting_show_clock: 'Show the current time during breaks',
   setting_show_clock_hint:
     'A small clock on the break shield, for anyone who prefers to know how long they have been away.',
-  setting_notification_sound: 'Play a system notification sound',
-  setting_notification_sound_hint: 'PausIO never records audio. Visual reminders remain available.',
+  setting_sound_timing: 'Play a sound',
+  setting_sound_timing_hint:
+    'When the break reminder appears, when a break ends on its own, both, or never. PausIO never records audio.',
+  sound_timing_banner: 'When the reminder appears',
+  sound_timing_end: 'When a break ends',
+  sound_timing_both: 'Reminder and break end',
+  sound_timing_silent: 'Silent',
   setting_notification_sound_name: 'Sound',
   system_sound_default: 'Default',
   system_sound_chime: 'Chime',
@@ -301,12 +306,6 @@ const english = {
   shortcut_record: 'Record',
   shortcut_clear: 'Clear',
   shortcut_recording: 'Press a key combination…',
-  setting_sound_theme: 'Break-end sound',
-  sound_theme_silence: 'Silent',
-  sound_theme_chime: 'Chime',
-  sound_theme_tone: 'Tone',
-  sound_theme_click: 'Click',
-  setting_sound_volume: 'Volume',
   nudge_blink_announcement: 'Gentle reminder: blink slowly five times.',
   nudge_posture_announcement: 'Gentle reminder: check your posture.',
   nudge_hydration_announcement: 'Gentle reminder: consider a glass of water.',
@@ -408,7 +407,6 @@ const english = {
   settings_error_hydration_nudge: 'Hydration reminder must be every 15 to 120 minutes, or off.',
   settings_error_global_shortcut:
     'Keyboard shortcuts must be 1 to 40 characters, or empty to disable.',
-  settings_error_sound_volume: 'Volume must be 0 to 100.',
   summary_heading: 'What this adds up to',
   summary_schedule: 'Active {days}, {start} until {end}.',
   summary_schedule_all_day: 'Active {days}, around the clock.',
@@ -418,7 +416,7 @@ const english = {
   summary_delivery_notify:
     'Breaks are announced by notification only \u2014 your screen is never covered.',
   summary_delivery_ask:
-    'A notification asks first; if you do not answer, the break covers {displays}.',
+    'A floating prompt asks first and waits for your answer — the break starts when you choose it.',
   summary_delivery_cover: 'Breaks cover {displays} straight away.',
   summary_delivery_hold:
     'Breaks cover {displays} straight away, and PausIO cannot be quit until they end.',
@@ -440,8 +438,7 @@ const english = {
   section_sound: 'Sound',
   setting_longer_breaks: 'Longer breaks',
   setting_longer_breaks_hint: 'A break comes back longer every so often, for extra recovery time.',
-  sound_windows_note:
-    'On Windows, every theme plays your system default alert, and this volume has no effect \u2014 both follow the Windows alert volume instead.',
+  sound_windows_note: 'On Windows, the chosen sound plays at your Windows alert volume.',
   fixed_break_outside_hours_warning:
     '{time} is outside your active hours, so this break will never happen.',
   presets_heading: 'Start from a preset',
@@ -618,14 +615,14 @@ const german: Record<LocalizationKey, string> = {
   strictness_gentle_hint:
     'Eine unaufdringliche Benachrichtigung informiert dich, wenn eine Pause fällig ist, und noch einmal, wenn sie beginnt. Dein Bildschirm bleibt unberührt — PausIO öffnet nur dann ein Fenster, wenn die Benachrichtigung nicht angezeigt werden kann.',
   strictness_balanced_hint:
-    'Eine Benachrichtigung fragt, ob du jetzt starten oder verschieben möchtest. Reagierst du nicht, erscheint ein kleiner Hinweis, danach startet die Pause von selbst.',
+    'Ein kleines schwebendes Fenster fragt, ob du jetzt starten oder verschieben möchtest, und wartet am Bildschirmrand, bis du antwortest.',
   strictness_firm_hint:
     'Sobald eine Pause fällig ist, erscheint sofort eine Vollbild-Erinnerung — ohne vorherige Benachrichtigung.',
   strictness_strict_hint:
     'Sofort erscheint eine Vollbild-Erinnerung ohne vorherige Benachrichtigung. PausIO lässt sich während einer Pause nicht beenden, ein Notausstieg ist aber immer verfügbar.',
   setting_delivery_mode: 'Wie Pausen erscheinen',
   delivery_mode_notify: 'Nur benachrichtigen',
-  delivery_mode_ask: 'Erst fragen, dann Bildschirm abdecken',
+  delivery_mode_ask: 'Erst fragen, mit schwebendem Fenster',
   delivery_mode_cover: 'Bildschirm sofort abdecken',
   delivery_mode_hold: 'Bildschirm abdecken und halten',
   delivery_no_notice_warning:
@@ -661,9 +658,13 @@ const german: Record<LocalizationKey, string> = {
   setting_show_clock: 'Aktuelle Uhrzeit während Pausen anzeigen',
   setting_show_clock_hint:
     'Eine kleine Uhr auf dem Pausenschirm, für alle, die wissen möchten, wie lange sie schon weg sind.',
-  setting_notification_sound: 'Systemton für Benachrichtigung abspielen',
-  setting_notification_sound_hint:
-    'PausIO zeichnet keinen Ton auf. Visuelle Hinweise bleiben verfügbar.',
+  setting_sound_timing: 'Ton abspielen',
+  setting_sound_timing_hint:
+    'Wenn die Pausenerinnerung erscheint, wenn eine Pause von selbst endet, beides oder nie. PausIO zeichnet keinen Ton auf.',
+  sound_timing_banner: 'Wenn die Erinnerung erscheint',
+  sound_timing_end: 'Wenn eine Pause endet',
+  sound_timing_both: 'Erinnerung und Pausenende',
+  sound_timing_silent: 'Stumm',
   setting_notification_sound_name: 'Ton',
   system_sound_default: 'Standard',
   system_sound_chime: 'Glockenspiel',
@@ -787,12 +788,6 @@ const german: Record<LocalizationKey, string> = {
   shortcut_record: 'Aufnehmen',
   shortcut_clear: 'Löschen',
   shortcut_recording: 'Tastenkombination drücken…',
-  setting_sound_theme: 'Ton bei Pausenende',
-  sound_theme_silence: 'Stumm',
-  sound_theme_chime: 'Glockenspiel',
-  sound_theme_tone: 'Ton',
-  sound_theme_click: 'Klick',
-  setting_sound_volume: 'Lautstärke',
   nudge_blink_announcement: 'Sanfte Erinnerung: Blinzele fünfmal langsam.',
   nudge_posture_announcement: 'Sanfte Erinnerung: Überprüfe deine Haltung.',
   nudge_hydration_announcement: 'Sanfte Erinnerung: Vielleicht ein Glas Wasser?',
@@ -927,7 +922,6 @@ const german: Record<LocalizationKey, string> = {
     'Die Trink-Erinnerung muss alle 15 bis 120 Minuten erfolgen oder aus sein.',
   settings_error_global_shortcut:
     'Tastenkombinationen müssen 1 bis 40 Zeichen lang sein, oder leer zum Deaktivieren.',
-  settings_error_sound_volume: 'Die Lautstärke muss zwischen 0 und 100 liegen.',
   summary_heading: 'Was daraus folgt',
   summary_schedule: 'Aktiv {days}, {start} bis {end}.',
   summary_schedule_all_day: 'Aktiv {days}, rund um die Uhr.',
@@ -937,7 +931,7 @@ const german: Record<LocalizationKey, string> = {
   summary_delivery_notify:
     'Pausen werden nur per Benachrichtigung angekündigt \u2014 dein Bildschirm wird nie abgedeckt.',
   summary_delivery_ask:
-    'Eine Benachrichtigung fragt zuerst; ohne Antwort deckt die Pause {displays} ab.',
+    'Ein schwebendes Fenster fragt zuerst und wartet auf deine Antwort — die Pause beginnt, wenn du sie auswählst.',
   summary_delivery_cover: 'Pausen decken {displays} sofort ab.',
   summary_delivery_hold:
     'Pausen decken {displays} sofort ab, und PausIO kann bis zum Ende nicht beendet werden.',
@@ -959,8 +953,7 @@ const german: Record<LocalizationKey, string> = {
   section_sound: 'Ton',
   setting_longer_breaks: 'Längere Pausen',
   setting_longer_breaks_hint: 'Von Zeit zu Zeit fällt eine Pause länger aus, für mehr Erholung.',
-  sound_windows_note:
-    'Unter Windows spielt jedes Motiv den Standard-Alarmton des Systems, und diese Lautstärke hat keine Wirkung \u2014 beides folgt stattdessen der Windows-Alarmlautstärke.',
+  sound_windows_note: 'Unter Windows folgt der gewählte Ton der Windows-Alarmlautstärke.',
   fixed_break_outside_hours_warning:
     '{time} liegt außerhalb deiner aktiven Zeiten, diese Pause wird also nie stattfinden.',
   presets_heading: 'Mit einer Vorlage starten',

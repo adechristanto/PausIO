@@ -17,7 +17,6 @@ const settingsErrorKeys: Record<
   | 'settings_error_fixed_breaks'
   | 'settings_error_daily_focus_limit'
   | 'settings_error_global_shortcut'
-  | 'settings_error_sound_volume'
 > = {
   work_duration: 'settings_error_work_duration',
   short_break: 'settings_error_short_break',
@@ -33,7 +32,6 @@ const settingsErrorKeys: Record<
   fixed_breaks: 'settings_error_fixed_breaks',
   daily_focus_limit: 'settings_error_daily_focus_limit',
   global_shortcut: 'settings_error_global_shortcut',
-  sound_volume: 'settings_error_sound_volume',
 }
 
 export function errorMessage(error: unknown): string {

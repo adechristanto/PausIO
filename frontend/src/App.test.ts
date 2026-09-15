@@ -941,12 +941,14 @@ describe('Quiet Horizon app experience', () => {
       // "Notification only" was a display target that silently overrode strictness;
       // it is now a mode, so the pair can no longer disagree.
       expect(screen.queryByText('Notification only')).toBeNull()
-      expect(screen.getByText('Ask first, then cover the screen')).toBeTruthy()
+      expect(screen.getByText('Ask first, with a floating prompt')).toBeTruthy()
     })
 
     it('explains the selected mode, which the old bare select never did', async () => {
       const picker = await openDelivery()
-      expect(screen.getByText(/A notification asks you to start now or postpone/)).toBeTruthy()
+      expect(
+        screen.getByText(/A small floating prompt asks you to start now or postpone/)
+      ).toBeTruthy()
 
       await fireEvent.change(picker, { target: { value: 'hold' } })
       expect(await screen.findByText(/an emergency exit is always available/)).toBeTruthy()
@@ -1010,7 +1012,7 @@ describe('Quiet Horizon app experience', () => {
       const summary = await screen.findByText(/Every 20 minutes: a break of 20 seconds/)
       expect(summary.textContent).toContain('Active Mon\u2013Fri, 09:00 until 18:00.')
       expect(summary.textContent).toContain('A heads-up arrives 30 seconds beforehand.')
-      expect(summary.textContent).toContain('the break covers all displays')
+      expect(summary.textContent).toContain('the break starts when you choose it')
     })
 
     it('recomputes when a setting changes, so the effect is visible immediately', async () => {

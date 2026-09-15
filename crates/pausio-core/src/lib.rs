@@ -6,7 +6,7 @@ mod types;
 
 pub use engine::{TimerClock, TimerDriver, TimerEngine, due_grace_seconds};
 pub use settings::{
-    Accent, BreakRoutine, DisplayTarget, Locale, Settings, SettingsError, SoundTheme, Strictness,
+    Accent, BreakRoutine, DisplayTarget, Locale, Settings, SettingsError, SoundTiming, Strictness,
     SystemSound, Theme,
 };
 pub use types::{EngineError, EngineEvent, SESSION_SCHEMA_VERSION, SessionCheckpoint, Snapshot};
@@ -14,7 +14,7 @@ pub use types::{EngineError, EngineEvent, SESSION_SCHEMA_VERSION, SessionCheckpo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{BALANCED_DUE_GRACE_SECONDS, GENTLE_DUE_GRACE_SECONDS};
+    use crate::engine::GENTLE_DUE_GRACE_SECONDS;
     use chrono::{DateTime, Datelike, Local, Timelike, Utc};
     use pausio_protocol::{BreakKind, ContextReason, PauseReason, TimerPhase};
 
@@ -62,9 +62,10 @@ mod tests {
     #[test]
     fn new_install_defaults_are_audible_calm_and_context_aware() {
         let settings = Settings::default();
-        // Silent-by-default plus an unsigned macOS build (where notifications never
-        // register) left a first-run user with no perceptible cue whatsoever.
-        assert_eq!(settings.sound_theme, SoundTheme::Chime);
+        // A completed break is audible out of the box: a silent default plus an
+        // unsigned macOS build (where notifications never register) left a
+        // first-run user with no perceptible cue whatsoever.
+        assert_eq!(settings.sound_timing, SoundTiming::End);
         // A blink nudge every 10 minutes on top of a break every 20 is roughly four
         // interruptions an hour before the person has chosen anything.
         assert_eq!(settings.blink_nudge_minutes, None);
@@ -244,25 +245,6 @@ mod tests {
         );
     }
     #[test]
-    fn sound_volume_is_a_bounded_percentage() {
-        assert!(
-            Settings {
-                sound_volume: 100,
-                ..Default::default()
-            }
-            .validate()
-            .is_ok()
-        );
-        assert_eq!(
-            Settings {
-                sound_volume: 101,
-                ..Default::default()
-            }
-            .validate(),
-            Err(SettingsError::SoundVolume)
-        );
-    }
-    #[test]
     fn warning_then_short_break() {
         let mut e = engine();
         e.remaining = 31;
@@ -408,17 +390,19 @@ mod tests {
         assert!(matches!(e.snapshot().phase, TimerPhase::BreakDue { .. }));
     }
     #[test]
-    fn balanced_delivery_hands_a_due_break_to_the_overlay_after_its_prompt_grace() {
+    fn balanced_delivery_waits_for_the_persistent_prompt_to_be_answered() {
         let mut e = engine();
         e.remaining = 1;
         e.advance(1, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::BreakDue { .. }));
-        // The prompt gets the first word for the whole grace window.
-        e.advance(BALANCED_DUE_GRACE_SECONDS - 1, active_now());
+        // Balanced raises PausIO's own prompt, a window that stays on screen
+        // until answered — so the due state itself waits indefinitely rather
+        // than handing over to the overlay on a timeout.
+        e.advance(GENTLE_DUE_GRACE_SECONDS * 10, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::BreakDue { .. }));
-        // Then the overlay takes over, which is what "prompt then overlay"
-        // means. Before this, an unclicked prompt stranded the break forever.
-        let events = e.advance(1, active_now());
+        assert_eq!(e.due_grace_remaining, None);
+        // Answering the prompt is what starts the break.
+        let events = e.start_due_break().unwrap();
         assert!(matches!(
             e.snapshot().phase,
             TimerPhase::Breaking {
@@ -488,11 +472,15 @@ mod tests {
         e.advance(GENTLE_DUE_GRACE_SECONDS * 10, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::BreakDue { .. }));
     }
-    /// Pins the whole table in one place: every reminder style must resolve to a
-    /// *bounded* grace, because an unbounded one is how a break stopped
-    /// happening at all when the OS refused to deliver its notification.
+    /// Pins the whole table in one place: every reminder style whose surface
+    /// can disappear unnoticed (a dismissible OS notification, or nothing at
+    /// all under the assertive styles) resolves to a *bounded* grace — an
+    /// unbounded one is how a break stopped happening at all when the OS
+    /// refused to deliver its notification. Balanced is the one exception:
+    /// its prompt is persistent by design, so the due state waits to be
+    /// answered instead of timing out.
     #[test]
-    fn every_delivery_style_resolves_to_a_bounded_due_grace() {
+    fn every_delivery_style_resolves_to_its_due_grace() {
         let of = |strictness, display_target| {
             due_grace_seconds(&Settings {
                 strictness,
@@ -506,24 +494,21 @@ mod tests {
             Strictness::Firm,
             Strictness::Strict,
         ] {
-            // Notification-only has no overlay to fall through to, so it keeps
-            // the unhurried grace whatever the style says.
+            // Notification-only has no persistent window to lean on, so it
+            // keeps the unhurried bounded grace whatever the style says.
             assert_eq!(
                 of(strictness, DisplayTarget::NotificationOnly),
-                GENTLE_DUE_GRACE_SECONDS,
+                Some(GENTLE_DUE_GRACE_SECONDS),
                 "{strictness:?} + notification-only"
             );
         }
         assert_eq!(
             of(Strictness::Gentle, DisplayTarget::All),
-            GENTLE_DUE_GRACE_SECONDS
+            Some(GENTLE_DUE_GRACE_SECONDS)
         );
-        assert_eq!(
-            of(Strictness::Balanced, DisplayTarget::All),
-            BALANCED_DUE_GRACE_SECONDS
-        );
-        assert_eq!(of(Strictness::Firm, DisplayTarget::All), 0);
-        assert_eq!(of(Strictness::Strict, DisplayTarget::All), 0);
+        assert_eq!(of(Strictness::Balanced, DisplayTarget::All), None);
+        assert_eq!(of(Strictness::Firm, DisplayTarget::All), Some(0));
+        assert_eq!(of(Strictness::Strict, DisplayTarget::All), Some(0));
     }
     /// Notification-only delivery has no overlay to fall through to, so it
     /// keeps the unhurried grace even under an assertive reminder style.
@@ -544,6 +529,23 @@ mod tests {
         assert!(matches!(e.snapshot().phase, TimerPhase::BreakDue { .. }));
         e.advance(1, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::Breaking { .. }));
+    }
+    #[test]
+    fn legacy_settings_without_a_sound_timing_default_to_break_end() {
+        let value: serde_json::Value = serde_json::json!({
+            "work_seconds": 1200,
+            "short_break_seconds": 20,
+            "long_break_seconds": 300,
+            "long_break_every": null,
+            "pre_break_seconds": 30,
+            "active_days_mask": 62,
+            "active_start_minutes": 540,
+            "active_end_minutes": 1080,
+            "postpone_limit": 3
+        });
+        let settings: Settings = serde_json::from_value(value).unwrap();
+        assert_eq!(settings.sound_timing, SoundTiming::End);
+        assert_eq!(settings.notification_sound_name, SystemSound::Default);
     }
     #[test]
     fn idle_reset_pauses_cleanly() {

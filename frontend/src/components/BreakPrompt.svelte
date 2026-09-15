@@ -77,14 +77,15 @@
     }
   }
 
-  // This window must only be operable by mouse/pointer. Auto-focusing the
-  // "Start" button would let a stray keypress (e.g. Space/Enter) activate it
-  // and start the break/pause before the user intended, so we do not focus
-  // anything on mount, and we block keyboard input while this window is
-  // open so no key can activate the Start/Postpone/pause-trigger controls.
-  // The "Pause forâ€¦" dropdown, once opened via mouse, still needs its own
-  // Escape/ArrowUp/ArrowDown handling (onMenuKeydown) to be usable, so we
-  // don't swallow keys while that menu is open.
+  // This window never takes keyboard focus on its own — it is persistent and
+  // appears in the corner without activating, so it cannot steal the caret
+  // mid-sentence. Keys can only reach it after a deliberate click, and even
+  // then we block keyboard input while it is open: auto-focusing the "Start"
+  // button would let a stray keypress (e.g. Space/Enter) start the
+  // break/pause before the user intended. The "Pause for…" dropdown, once
+  // opened via mouse, still needs its own Escape/ArrowUp/ArrowDown handling
+  // (onMenuKeydown) to be usable, so we don't swallow keys while that menu
+  // is open.
   const blockKeyboard = (event: KeyboardEvent) => {
     if (pauseMenuOpen) return
     event.preventDefault()
