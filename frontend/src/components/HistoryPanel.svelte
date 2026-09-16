@@ -278,36 +278,38 @@
       </div>
     </dl>
 
-    <section class="routine-score-card" aria-labelledby="routine-score-title">
-      <div class="routine-score-summary">
-        <p class="analytics-eyebrow" id="routine-score-title">{t('analytics_routine_score')}</p>
-        {#if analytics.routineScore.sufficient}
-          <strong>{analytics.routineScore.value}<span>/100</span></strong>
-          <p>{t('analytics_routine_score_hint')}</p>
-        {:else}
-          <strong class="insufficient">—</strong>
-          <p>
-            {t('analytics_routine_score_insufficient', {
-              resolved: analytics.routineScore.resolved,
-            })}
-          </p>
-        {/if}
-      </div>
-      <dl class="routine-score-breakdown">
-        <div>
-          <dt>{t('analytics_score_follow')}</dt>
-          <dd>{analytics.routineScore.followThrough}<span>/70</span></dd>
+    {#if settings?.show_routine_score}
+      <section class="routine-score-card" aria-labelledby="routine-score-title">
+        <div class="routine-score-summary">
+          <p class="analytics-eyebrow" id="routine-score-title">{t('analytics_routine_score')}</p>
+          {#if analytics.routineScore.sufficient}
+            <strong>{analytics.routineScore.value}<span>/100</span></strong>
+            <p>{t('analytics_routine_score_hint')}</p>
+          {:else}
+            <strong class="insufficient">—</strong>
+            <p>
+              {t('analytics_routine_score_insufficient', {
+                resolved: analytics.routineScore.resolved,
+              })}
+            </p>
+          {/if}
         </div>
-        <div>
-          <dt>{t('analytics_score_timing')}</dt>
-          <dd>{analytics.routineScore.timing}<span>/20</span></dd>
-        </div>
-        <div>
-          <dt>{t('analytics_score_consistency')}</dt>
-          <dd>{analytics.routineScore.consistency}<span>/10</span></dd>
-        </div>
-      </dl>
-    </section>
+        <dl class="routine-score-breakdown">
+          <div>
+            <dt>{t('analytics_score_follow')}</dt>
+            <dd>{analytics.routineScore.followThrough}<span>/70</span></dd>
+          </div>
+          <div>
+            <dt>{t('analytics_score_timing')}</dt>
+            <dd>{analytics.routineScore.timing}<span>/20</span></dd>
+          </div>
+          <div>
+            <dt>{t('analytics_score_consistency')}</dt>
+            <dd>{analytics.routineScore.consistency}<span>/10</span></dd>
+          </div>
+        </dl>
+      </section>
+    {/if}
 
     <section
       class="analytics-insight {analytics.insight.tone}"

@@ -1,3 +1,4 @@
+import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type {
@@ -47,6 +48,9 @@ export const api = {
   setAutostartEnabled: (enabled: boolean) =>
     invoke<AutostartStatus>('set_autostart_enabled', { enabled }),
   getDesktopHealth: () => invoke<DesktopHealth>('get_desktop_health'),
+  /** `tauri.conf.json`'s `version` field, read client-side -- no Rust command needed. */
+  getAppVersion: () => getVersion(),
+  watchSyncAvailable: () => invoke<boolean>('watch_sync_available'),
   getHealthReport: () => invoke<string>('get_health_report'),
   testReminder: () => invoke<void>('test_reminder'),
   previewSystemSound: (sound: SystemSound) => invoke<void>('preview_system_sound', { sound }),

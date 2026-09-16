@@ -25,8 +25,8 @@ describe('describeSettings', () => {
   it('states the schedule, rhythm, notice and delivery in one paragraph', () => {
     expect(say()).toBe(
       'Active Mon–Fri, 09:00 until 18:00. Every 20 minutes: a break of 20 seconds. ' +
-        'A heads-up arrives 30 seconds beforehand. A notification asks first; if you do not answer, ' +
-        'the break covers all displays. You can postpone as often as you like.'
+        'A heads-up arrives 30 seconds beforehand. A floating prompt asks first and waits for ' +
+        'your answer — the break starts when you choose it. You can postpone as often as you like.'
     )
   })
 

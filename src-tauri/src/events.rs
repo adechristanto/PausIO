@@ -144,8 +144,7 @@ pub(crate) fn sync_watch_state(app: &AppHandle, view: &EngineView) {
 /// for why nothing on the publisher thread may wait for UserNotifications — so
 /// `Ok` means "macOS is configured to draw this", not "this specific banner has
 /// appeared". That is the only question callers need answered: it decides
-/// whether PausIO must raise a surface of its own as well, and no break depends
-/// on the answer, because the engine starts a due break by itself regardless.
+/// whether PausIO must raise a surface of its own as well.
 #[cfg(desktop)]
 pub(crate) fn show_local_notification(
     app: &AppHandle,
@@ -195,168 +194,16 @@ pub(crate) fn notification_permission_state() -> String {
     crate::mac_notify::capability().as_health_state().into()
 }
 
+/// The configured cue for a reminder surfacing — Balanced's persistent
+/// prompt, or a native notification in the quieter styles — or `None` when
+/// the chosen sound timing does not include that moment.
 #[cfg(desktop)]
-pub(crate) const START_BREAK_ACTION: &str = "pausio-start-break";
-#[cfg(desktop)]
-pub(crate) const POSTPONE_BREAK_ACTION: &str = "pausio-postpone-break";
-
-/// The "start the break now" button label, which names the break's own length.
-#[cfg(desktop)]
-pub(crate) fn break_action_label(kind: &BreakKind, settings: &Settings) -> String {
-    let locale = settings.locale;
-    match kind {
-        BreakKind::Short => {
-            crate::i18n::notification_start_short_action(locale, settings.short_break_seconds)
-        }
-        BreakKind::Long => crate::i18n::notification_start_long_action(
-            locale,
-            settings.long_break_seconds.saturating_add(30) / 60,
-        ),
-    }
-}
-
-#[cfg(desktop)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BreakNotificationChoice {
-    Start,
-    Postpone,
-}
-
-#[cfg(desktop)]
-fn break_notification_choice(action: &str) -> Option<BreakNotificationChoice> {
-    match action {
-        // Activating the notification body follows its primary action, matching
-        // native toast conventions while keeping the two buttons explicit.
-        "default" | START_BREAK_ACTION => Some(BreakNotificationChoice::Start),
-        POSTPONE_BREAK_ACTION => Some(BreakNotificationChoice::Postpone),
-        _ => None,
-    }
-}
-
-/// Presents the due-break decision through the operating system's notification
-/// center. Placement, stacking, animation, and accessibility are intentionally
-/// left to Windows/macOS/Linux rather than simulated in a PausIO webview.
-#[cfg(desktop)]
-fn show_break_decision_notification(
-    app: &AppHandle,
-    kind: &BreakKind,
-    settings: &Settings,
-) -> Result<(), String> {
-    let locale = settings.locale;
-    let start_label = break_action_label(kind, settings);
-
-    #[cfg(target_os = "macos")]
-    {
-        let capability = crate::mac_notify::post_decision(
-            app,
-            crate::i18n::notification_due_title(locale),
-            crate::i18n::notification_due_body(locale),
-            start_label,
-            (settings.strictness == pausio_core::Strictness::Balanced)
-                .then(|| crate::i18n::notification_postpone_action(locale).to_string()),
-            crate::mac_notify::decision_validity(settings),
-        );
-        crate::mac_notify::play_cue(resolved_notification_sound(settings));
-        if capability.will_be_seen() {
-            Ok(())
-        } else {
-            Err(format!("macOS will not display it: {capability:?}"))
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let mut notification = notify_rust::Notification::new();
-        notification
-            .summary(crate::i18n::notification_due_title(locale))
-            .body(crate::i18n::notification_due_body(locale))
-            .appname("PausIO")
-            .action(START_BREAK_ACTION, &start_label);
-        if settings.strictness == pausio_core::Strictness::Balanced {
-            notification.action(
-                POSTPONE_BREAK_ACTION,
-                crate::i18n::notification_postpone_action(locale),
-            );
-        }
-
-        #[cfg(target_os = "windows")]
-        if let Ok(exe) = tauri::utils::platform::current_exe()
-            && let Some(exe_dir) = exe.parent()
-        {
-            use std::path::MAIN_SEPARATOR as SEP;
-            let curr_dir = exe_dir.display().to_string();
-            if !(curr_dir.ends_with(format!("{SEP}target{SEP}debug").as_str())
-                || curr_dir.ends_with(format!("{SEP}target{SEP}release").as_str()))
-            {
-                notification.app_id(&app.config().identifier);
-            }
-        }
-
-        if let Some(sound) = resolved_notification_sound(settings) {
-            notification.sound_name(crate::sound_player::notification_sound_name(sound));
-        }
-
-        let handle = notification.show().map_err(|error| error.to_string())?;
-
-        let app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            handle.wait_for_action(|action| apply_break_notification_choice(&app, action));
-        });
-
-        Ok(())
-    }
-}
-
-#[cfg(desktop)]
-pub(crate) fn apply_break_notification_choice(app: &AppHandle, action: &str) {
-    match break_notification_choice(action) {
-        Some(BreakNotificationChoice::Start) => {
-            let _ = crate::commands::apply_engine_transition(
-                app,
-                pausio_core::TimerEngine::start_due_break,
-            );
-        }
-        Some(BreakNotificationChoice::Postpone) => {
-            let _ =
-                crate::commands::apply_engine_transition(app, pausio_core::TimerEngine::postpone);
-        }
-        None => {}
-    }
-}
-
-/// Resolves the notification sound argument from settings: `Some(name)` when
-/// sound is enabled, `None` when it's off.
-#[cfg(desktop)]
-pub(crate) fn resolved_notification_sound(settings: &Settings) -> Option<SystemSound> {
-    settings
-        .notification_sound
-        .then_some(settings.notification_sound_name)
-}
-
-/// Plays exactly one cue for a break's natural completion.
-///
-/// Only `EngineEvent::Ended` calls this — a break's cue is only ever heard
-/// once the pause has actually run its course, never at its start and never
-/// when it is skipped early. `NSSound` playback is tracked per thread and
-/// each request stops whatever is already playing, so asking for two cues in
-/// the same publisher turn made the first audible for a few milliseconds and
-/// no more: the theme sound and the notification cue used to both fire here,
-/// and the one that was chosen deliberately lost. The theme sound is the more
-/// specific choice where it applies; the notification cue is what a Silence
-/// theme leaves to fall back on.
-#[cfg(target_os = "macos")]
-fn play_break_moment_cue(settings: &Settings, moment: crate::sound_player::BreakSoundMoment) {
-    if settings.sound_theme != pausio_core::SoundTheme::Silence {
-        let _ = crate::sound_player::play_break_sound(
-            settings.sound_theme,
-            settings.sound_volume,
-            moment,
-        );
-        return;
-    }
-    if let Some(sound) = resolved_notification_sound(settings) {
-        crate::sound_player::play_system_sound(sound);
-    }
+pub(crate) fn reminder_cue(settings: &Settings) -> Option<SystemSound> {
+    matches!(
+        settings.sound_timing,
+        pausio_core::SoundTiming::Banner | pausio_core::SoundTiming::Both
+    )
+    .then_some(settings.notification_sound_name)
 }
 
 /// Delivers an advisory nudge, falling back to PausIO's own toast when macOS
@@ -370,7 +217,7 @@ fn show_nudge(app: &AppHandle, settings: &Settings, nudge: &str, title: &str, bo
     if crate::is_e2e() {
         return;
     }
-    if show_local_notification(app, title, body, resolved_notification_sound(settings)).is_err() {
+    if show_local_notification(app, title, body, reminder_cue(settings)).is_err() {
         crate::break_windows::show_nudge_toast(app, settings.locale, nudge);
     }
 }
@@ -444,7 +291,7 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                         app,
                         crate::i18n::notification_incoming_title(locale),
                         &crate::i18n::notification_incoming_body(locale, kind_label),
-                        resolved_notification_sound(&view.settings),
+                        reminder_cue(&view.settings),
                     );
                 }
                 let _ = app.emit("break:incoming", kind);
@@ -507,27 +354,46 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                             Strictness::Firm | Strictness::Strict
                         );
                     if !overlay_is_imminent {
-                        // Balanced is the only style whose notification is a
-                        // decision ("start now" / "postpone"); the quieter
-                        // styles just get told. Either way this is an
-                        // invitation, never a gate: the engine starts the
-                        // break on its own once the grace period is up.
-                        let delivered = if view.settings.strictness == Strictness::Balanced {
-                            show_break_decision_notification(app, &kind, &view.settings).is_ok()
+                        if view.settings.strictness == Strictness::Balanced {
+                            // Balanced asks through PausIO's own prompt: a
+                            // bottom-right window that stays until it is
+                            // answered, on every platform. The actionable OS
+                            // notification it replaced could be dismissed,
+                            // silenced, or never delivered at all — and the
+                            // engine's due state now waits for the answer
+                            // rather than timing out, so the surface has to
+                            // be one that cannot vanish. A plain notification
+                            // is the last resort if the window cannot be
+                            // built at all.
+                            if show_break_prompt(app, locale) {
+                                if let Some(sound) = reminder_cue(&view.settings) {
+                                    crate::sound_player::play_system_sound(sound);
+                                }
+                            } else {
+                                let _ = show_local_notification(
+                                    app,
+                                    crate::i18n::notification_due_title(locale),
+                                    crate::i18n::notification_due_body(locale),
+                                    reminder_cue(&view.settings),
+                                );
+                            }
                         } else {
-                            show_local_notification(
+                            // The quieter styles just get told. This is an
+                            // invitation, never a gate: the engine starts the
+                            // break on its own once the grace period is up.
+                            let delivered = show_local_notification(
                                 app,
                                 crate::i18n::notification_due_title(locale),
                                 crate::i18n::notification_due_body(locale),
-                                resolved_notification_sound(&view.settings),
+                                reminder_cue(&view.settings),
                             )
-                            .is_ok()
-                        };
-                        // PausIO's own prompt is the fallback whenever macOS
-                        // will not draw a banner — an unregistered app, a
-                        // denied permission, or an alert style of "None".
-                        if !delivered {
-                            show_break_prompt(app, locale);
+                            .is_ok();
+                            // PausIO's own prompt is the fallback whenever macOS
+                            // will not draw a banner — an unregistered app, a
+                            // denied permission, or an alert style of "None".
+                            if !delivered {
+                                show_break_prompt(app, locale);
+                            }
                         }
                     }
                 }
@@ -545,7 +411,7 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                         app,
                         crate::i18n::notification_started_title(locale),
                         crate::i18n::notification_started_body(locale),
-                        resolved_notification_sound(&view.settings),
+                        reminder_cue(&view.settings),
                     )
                     .is_ok();
                     // Gentle asks for a calm cue, not for the break to pass
@@ -583,19 +449,16 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                     // A break can end with only a full-screen overlay on
                     // screen and no notification popup to carry a sound, so
                     // the cue is played directly rather than left to a
-                    // notification — but only once. See
-                    // `play_break_moment_cue`. This is deliberately the only
-                    // engine event that plays a break cue: the pause must
-                    // have actually finished, not merely started or been
-                    // skipped early.
-                    #[cfg(target_os = "macos")]
-                    play_break_moment_cue(
-                        &view.settings,
-                        crate::sound_player::BreakSoundMoment::End,
-                    );
-                    #[cfg(target_os = "windows")]
-                    if view.settings.sound_theme != pausio_core::SoundTheme::Silence {
-                        crate::sound_player::play_break_end_sound();
+                    // notification — but only once, and only here: the pause
+                    // must have actually run its course, never at its start
+                    // and never when it is skipped early.
+                    if matches!(
+                        view.settings.sound_timing,
+                        pausio_core::SoundTiming::End | pausio_core::SoundTiming::Both
+                    ) {
+                        crate::sound_player::play_system_sound(
+                            view.settings.notification_sound_name,
+                        );
                     }
                 }
                 #[cfg(desktop)]
@@ -642,8 +505,6 @@ mod tests {
 
     #[cfg(mobile)]
     use super::build_watch_settings_envelope;
-    #[cfg(desktop)]
-    use super::{BreakNotificationChoice, break_notification_choice};
 
     #[cfg(mobile)]
     fn snapshot(phase: TimerPhase, remaining_seconds: u32) -> pausio_core::Snapshot {
@@ -702,23 +563,5 @@ mod tests {
         assert_eq!(envelope.phase, Some(WatchPhase::Paused));
         assert!(envelope.paused);
         assert_eq!(envelope.phase_deadline_at, None);
-    }
-
-    #[cfg(desktop)]
-    #[test]
-    fn native_notification_actions_map_to_timer_decisions() {
-        assert_eq!(
-            break_notification_choice("default"),
-            Some(BreakNotificationChoice::Start)
-        );
-        assert_eq!(
-            break_notification_choice("pausio-start-break"),
-            Some(BreakNotificationChoice::Start)
-        );
-        assert_eq!(
-            break_notification_choice("pausio-postpone-break"),
-            Some(BreakNotificationChoice::Postpone)
-        );
-        assert_eq!(break_notification_choice("__closed"), None);
     }
 }

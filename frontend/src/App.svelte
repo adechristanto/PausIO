@@ -13,9 +13,9 @@
   import { errorMessage } from './lib/errors'
   import { clockToMinutes, formatClock, formatTimeOfDay, minutesToClock } from './lib/format'
   import { pauseLabel, setLocale, t } from './lib/i18n'
+  import { pauseChoices } from './lib/pauseChoices'
   import { api } from './lib/pausio'
   import type { AnalyticsRange } from './lib/history-analytics'
-  import { playBreakSound } from './lib/sound'
   import { tooltip } from './lib/tooltip'
   import type {
     Accent,
@@ -31,7 +31,6 @@
     Settings,
     SettingsProfiles,
     Snapshot,
-    SoundTheme,
     Strictness,
     SystemSound,
     Theme,
@@ -94,8 +93,12 @@
   let profileMenuOpen = false
   let profileTrigger: HTMLButtonElement | undefined
   let profileMenuEl: HTMLElement | undefined
+  let pauseMenuOpen = false
+  let pauseTrigger: HTMLButtonElement | undefined
+  let pauseMenuEl: HTMLElement | undefined
   let resetLocalDataConfirmation = false
   let desktopHealth: DesktopHealth | null = null
+  let appVersion = ''
   let healthReport = ''
   let healthReportCopied = false
   let historyExport = ''
@@ -130,9 +133,13 @@
   // on blur, via commitBreakMessages / commitFixedBreakTimes.
   let breakMessagesDraft = ''
   let fixedBreaksDraft = ''
+  let invalidFixedBreakEntries: string[] = []
+  let fixedBreakOverflowCount = 0
   const syncMessageDrafts = (next: Settings | null) => {
     breakMessagesDraft = (next?.break_messages ?? []).join('\n')
     fixedBreaksDraft = (next?.fixed_break_minutes ?? []).map(minutesToClock).join('\n')
+    invalidFixedBreakEntries = []
+    fixedBreakOverflowCount = 0
   }
 
   let settingsButton: HTMLButtonElement | undefined
@@ -147,11 +154,28 @@
     advancedOpen = false
     appScroll?.scrollTo?.({ top: 0, behavior: 'instant' })
   }
-  function selectSearchResult(result: ReturnType<typeof searchSettings>[number]) {
+  async function selectSearchResult(result: ReturnType<typeof searchSettings>[number]) {
     settingsCategory = result.entry.category
     advancedOpen = result.entry.advanced
     settingsQuery = ''
-    appScroll?.scrollTo?.({ top: 0, behavior: 'instant' })
+    // Two ticks: one for the pane switch (and Advanced's own `{#if open}`) to render,
+    // a second because Advanced's content mounts from that same state change and
+    // isn't guaranteed present after only the first flush.
+    await tick()
+    await tick()
+    const control = document.getElementById(result.entry.controlId)
+    if (!control) {
+      appScroll?.scrollTo?.({ top: 0, behavior: 'instant' })
+      return
+    }
+    control.scrollIntoView?.({ block: 'center' })
+    // Several controlIds land on a non-focusable wrapper (a fieldset, a button
+    // row) rather than the input itself -- focus the first real control inside it.
+    const focusTarget = control.matches('input, select, textarea, button, [tabindex]')
+      ? control
+      : (control.querySelector<HTMLElement>('input, select, textarea, button, [tabindex]') ??
+        control)
+    focusTarget.focus()
   }
 
   /**
@@ -182,6 +206,10 @@
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined
   let savedTimer: ReturnType<typeof setTimeout> | undefined
+  // Set when an edit arrives while a save is already in flight -- commitSettings'
+  // isSaving guard would otherwise just drop that edit on the floor instead of
+  // persisting it once the in-flight save finishes.
+  let saveQueued = false
 
   const isApple = /Mac|iPhone|iPad/.test(navigator.userAgent)
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
@@ -298,6 +326,13 @@
       error = errorMessage(e)
     }
   }
+  // Unlike run(), this lets the caller observe a failure -- used only where the
+  // caller needs to react to the outcome itself (e.g. onboarding's test break),
+  // rather than just having the top-level error banner absorb it.
+  async function runOrThrow(action: () => Promise<Snapshot>) {
+    error = ''
+    state = await action()
+  }
 
   function applyAppearance(next: Settings) {
     const theme: Theme = next.theme ?? 'system'
@@ -315,13 +350,22 @@
     saveTimer = setTimeout(() => void commitSettings(), 450)
   }
   async function flushSettings() {
-    if (saveTimer === undefined) return
-    clearTimeout(saveTimer)
-    saveTimer = undefined
-    await commitSettings()
+    if (saveTimer !== undefined) {
+      clearTimeout(saveTimer)
+      saveTimer = undefined
+      await commitSettings()
+    }
+    // commitSettings() chains a queued retry from its own `finally` block rather
+    // than returning a promise for it, so wait that chain out too -- otherwise a
+    // navigation-triggered flush can return while an edit is still unsaved.
+    while (isSaving) await new Promise((resolve) => setTimeout(resolve, 20))
   }
   async function commitSettings() {
-    if (!settings || isSaving) return
+    if (!settings) return
+    if (isSaving) {
+      saveQueued = true // don't drop this edit -- replay it once the in-flight save resolves
+      return
+    }
     const attempt = settings
     saveTimer = undefined
     try {
@@ -351,6 +395,10 @@
       }
     } finally {
       isSaving = false
+      if (saveQueued) {
+        saveQueued = false
+        void commitSettings() // replay with whatever `settings` holds now
+      }
     }
   }
 
@@ -435,16 +483,21 @@
   }
   function commitFixedBreakTimes() {
     if (!settings) return
-    const minutes = [
+    const rawEntries = fixedBreaksDraft
+      .split(/[,\n]/)
+      .map((time) => time.trim())
+      .filter(Boolean)
+    const parsed = rawEntries.map((raw) => ({ raw, minute: clockToMinutes(raw) }))
+    invalidFixedBreakEntries = parsed
+      .filter((entry) => !Number.isFinite(entry.minute))
+      .map((entry) => entry.raw)
+    const validMinutes = [
       ...new Set(
-        fixedBreaksDraft
-          .split(/[,\n]/)
-          .map((time) => clockToMinutes(time.trim()))
-          .filter(Number.isFinite)
+        parsed.filter((entry) => Number.isFinite(entry.minute)).map((entry) => entry.minute)
       ),
-    ]
-      .sort((left, right) => left - right)
-      .slice(0, 12)
+    ].sort((left, right) => left - right)
+    fixedBreakOverflowCount = Math.max(0, validMinutes.length - 12)
+    const minutes = validMinutes.slice(0, 12)
     fixedBreaksDraft = minutes.map(minutesToClock).join('\n')
     if (sameSequence(minutes, settings.fixed_break_minutes ?? [])) return
     editSettings({ ...settings, fixed_break_minutes: minutes })
@@ -503,6 +556,43 @@
     if (event.key === 'Escape') {
       event.preventDefault()
       closeProfileMenu(true)
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      items[(index + 1) % items.length]?.focus()
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      items[(index - 1 + items.length) % items.length]?.focus()
+    }
+  }
+  const pauseMenuItems = () =>
+    Array.from(pauseMenuEl?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])
+  const togglePauseMenu = async () => {
+    pauseMenuOpen = !pauseMenuOpen
+    if (pauseMenuOpen) {
+      await tick()
+      pauseMenuItems()[0]?.focus()
+    }
+  }
+  const closePauseMenu = (refocus = false) => {
+    if (!pauseMenuOpen) return
+    pauseMenuOpen = false
+    if (refocus) pauseTrigger?.focus()
+  }
+  const choosePauseFor = (minutes: number) => {
+    closePauseMenu()
+    void run(() => api.pauseForMinutes(minutes))
+  }
+  const choosePauseUntilResumed = () => {
+    closePauseMenu()
+    void run(api.pause)
+  }
+  const onPauseMenuKeydown = (event: KeyboardEvent) => {
+    if (!pauseMenuOpen) return
+    const items = pauseMenuItems()
+    const index = items.indexOf(document.activeElement as HTMLButtonElement)
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closePauseMenu(true)
     } else if (event.key === 'ArrowDown') {
       event.preventDefault()
       items[(index + 1) % items.length]?.focus()
@@ -699,7 +789,6 @@
   onMount(() => {
     let offTick: (() => void) | undefined
     let offState: (() => void) | undefined
-    let offBreakEnded: (() => void) | undefined
     let offBlinkNudge: (() => void) | undefined
     let offPostureNudge: (() => void) | undefined
     let offHydrationNudge: (() => void) | undefined
@@ -735,6 +824,14 @@
           profiles = initial[3]
           desktopHealth = initial[4]
           showOnboarding = isFreshInstall
+          // Best-effort and cosmetic (shown in Diagnostics) -- awaited in
+          // sequence (not fire-and-forget) so it can't reorder relative to the
+          // watch-status refresh just below.
+          try {
+            appVersion = await api.getAppVersion()
+          } catch {
+            // Best-effort; version just stays blank in Diagnostics.
+          }
           if (isMobileWearableHost()) await refreshWatchStatus()
         } else {
           const initial = await Promise.all([api.getState(), api.getSettings()])
@@ -751,16 +848,9 @@
         // per-window UI. The main window's script keeps running even when
         // hidden to the tray, so it is the one place this must live — every
         // other window (overlay, prompt) would otherwise also
-        // fire the same sound or announcement in parallel.
+        // fire the same announcement in parallel. Break sounds are owned by
+        // the Rust shell natively on every platform.
         if (windowView === 'main') {
-          // The break cue is only ever heard once the pause has actually run
-          // its course — never at break:started, and never at break:skipped,
-          // which is an early exit rather than a completed pause.
-          offBreakEnded = await api.onBreakEnded(
-            () =>
-              settings &&
-              playBreakSound(settings.sound_theme ?? 'silence', settings.sound_volume ?? 70, 'end')
-          )
           offBlinkNudge = await api.onBlinkNudge(() => (announce = t('nudge_blink_announcement')))
           offPostureNudge = await api.onPostureNudge(
             () => (announce = t('nudge_posture_announcement'))
@@ -780,7 +870,6 @@
     return () => {
       offTick?.()
       offState?.()
-      offBreakEnded?.()
       offBlinkNudge?.()
       offPostureNudge?.()
       offHydrationNudge?.()
@@ -804,6 +893,9 @@
       const target = event.target as Node | null
       if (target && !profileMenuEl?.contains(target) && !profileTrigger?.contains(target)) {
         closeProfileMenu()
+      }
+      if (target && !pauseMenuEl?.contains(target) && !pauseTrigger?.contains(target)) {
+        closePauseMenu()
       }
     }
     window.addEventListener('pointerdown', onPointerDown)
@@ -968,7 +1060,8 @@
           {settings}
           {editSettings}
           {toggleDay}
-          takeBreakNow={() => run(api.takeBreakNow)}
+          isPhoneHost={isMobileWearableHost()}
+          takeBreakNow={() => runOrThrow(api.takeBreakNow)}
           onSkip={finishOnboarding}
           onFinish={finishOnboarding}
         />
@@ -990,11 +1083,11 @@
                 </span>
               {/if}
               <button
-                class="header-action"
-                aria-label={t('settings_close')}
+                class="header-action header-action-back"
+                aria-label={t('settings_back')}
                 onclick={() => switchTo('dashboard')}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
               </button>
             </div>
           </header>
@@ -1070,13 +1163,39 @@
                         /></svg
                       >{t('action_take_break')}</button
                     >
-                    <button
-                      class="button button-secondary"
-                      aria-label={t('action_pause')}
-                      onclick={() => run(api.pause)}
-                      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v10M15 7v10" /></svg
-                      >{t('action_pause')}</button
-                    >
+                    <div class="pause-menu-wrap">
+                      <button
+                        class="button button-secondary"
+                        bind:this={pauseTrigger}
+                        aria-haspopup="menu"
+                        aria-expanded={pauseMenuOpen}
+                        aria-label={t('action_pause_reminders')}
+                        onclick={() => void togglePauseMenu()}
+                        onkeydown={onPauseMenuKeydown}
+                        ><svg viewBox="0 0 24 24" aria-hidden="true"
+                          ><path d="M9 7v10M15 7v10" /></svg
+                        >{t('action_pause_reminders')}</button
+                      >
+                      {#if pauseMenuOpen}
+                        <div
+                          class="pause-menu"
+                          role="menu"
+                          aria-label={t('action_pause_reminders')}
+                          tabindex="-1"
+                          bind:this={pauseMenuEl}
+                          onkeydown={onPauseMenuKeydown}
+                        >
+                          {#each pauseChoices as choice (choice.minutes)}
+                            <button role="menuitem" onclick={() => choosePauseFor(choice.minutes)}
+                              >{t(choice.labelKey)}</button
+                            >
+                          {/each}
+                          <button role="menuitem" onclick={choosePauseUntilResumed}
+                            >{t('break_pause_until_resumed')}</button
+                          >
+                        </div>
+                      {/if}
+                    </div>
                   {:else if isBreakDue(state)}
                     <button class="button button-primary" onclick={() => run(api.startDueBreak)}
                       ><svg viewBox="0 0 24 24" aria-hidden="true"
@@ -1123,11 +1242,14 @@
               {autostartStatus}
               {isUpdatingAutostart}
               {desktopHealth}
+              {appVersion}
               {isApple}
               isMobile={isMobileSettingsHost()}
               bind:settingsRegion
               bind:breakMessagesDraft
               bind:fixedBreaksDraft
+              {invalidFixedBreakEntries}
+              {fixedBreakOverflowCount}
               {resetLocalDataConfirmation}
               bind:diagnosticsOpen
               bind:advancedOpen

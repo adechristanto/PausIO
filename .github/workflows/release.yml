@@ -95,7 +95,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
       - run: pnpm install --frozen-lockfile
+      # Signing is opt-in and skipped automatically when the repo has no Apple
+      # Developer certificate configured (APPLE_CERTIFICATE unset): the import
+      # step and later env vars just resolve to nothing, and `pnpm tauri build`
+      # falls back to its current unsigned behavior. See docs/RELEASE_PIPELINE.md
+      # for what the maintainer needs to add as repo secrets to turn this on.
+      - name: Import Apple signing certificate
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No Apple signing certificate configured (APPLE_CERTIFICATE secret unset) -- skipping import, build stays unsigned."
+            exit 0
+          fi
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          rm "$RUNNER_TEMP/cert.p12"
       - run: pnpm tauri build --bundles ${{ matrix.bundles }}
+        env:
+          # Read by Tauri's bundler directly (not via tauri.conf.json, which
+          # deliberately omits signingIdentity so `pnpm tauri build` keeps
+          # working for contributors without a certificate). All four are
+          # empty on a fork or a run with no signing secrets configured,
+          # which the bundler treats as "build unsigned", matching today's
+          # behavior exactly.
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pausio-${{ matrix.name }}-unsigned

@@ -92,6 +92,7 @@ macro_rules! register_commands {
             commands::get_health_report,
             commands::test_reminder,
             commands::preview_system_sound,
+            commands::watch_sync_available,
             $($additional),*
         ])
     };
@@ -236,12 +237,30 @@ pub fn run() {
         if store.delete("watch_revision") | store.delete("watch_last_envelope") {
             store.save()?;
         }
-        if let Some(saved) = store.get("settings")
-            && let Ok(settings) = serde_json::from_value::<Settings>(saved)
-            && let Some(engine) = app.try_state::<EngineState>()
-        {
-            let mut engine = lock_engine(&engine.0);
-            let _ = engine.replace_settings(settings, Local::now());
+        if let Some(saved) = store.get("settings") {
+            // One-time migration: fold the retired notification_sound /
+            // sound_theme pair into the unified sound_timing field before
+            // deserializing, and persist the cleaned-up document once.
+            let (saved, migrated) = match saved {
+                serde_json::Value::Object(map) => {
+                    let (map, migrated) = store::migrate_sound_timing(map);
+                    (serde_json::Value::Object(map), migrated)
+                }
+                other => (other, false),
+            };
+            if let Ok(settings) = serde_json::from_value::<Settings>(saved)
+                && let Some(engine) = app.try_state::<EngineState>()
+            {
+                let mut engine = lock_engine(&engine.0);
+                let _ = engine.replace_settings(settings.clone(), Local::now());
+                if migrated {
+                    store.set(
+                        "settings",
+                        serde_json::to_value(&settings).unwrap_or_default(),
+                    );
+                    store.save()?;
+                }
+            }
         }
         // One-time migration: history used to live in the settings store
         // alongside "session"; move it to its own store so the frequent

@@ -102,11 +102,20 @@ pub(crate) fn spawn_overlay_watchdog(app: AppHandle, generation: u64, break_seco
 /// so re-reading it would mean taking the engine mutex again for a value that
 /// was just read from it — and any lock taken on the publisher thread is a lock
 /// the main event loop can end up waiting behind.
-pub(crate) fn show_break_prompt(app: &AppHandle, locale: Locale) {
+///
+/// Returns whether the prompt is on screen. Balanced delivery relies on this
+/// window as its primary due-break surface, so a `false` tells the caller to
+/// fall back to a plain OS notification rather than letting the due break sit
+/// behind nothing at all.
+///
+/// The prompt never takes keyboard focus on its own: it is persistent, so
+/// appearing in the middle of a sentence must not steal the caret from
+/// whatever the person is typing into. A deliberate click still activates it
+/// and its controls.
+pub(crate) fn show_break_prompt(app: &AppHandle, locale: Locale) -> bool {
     if let Some(window) = app.get_webview_window("break-prompt") {
         let _ = window.show();
-        let _ = window.set_focus();
-        return;
+        return true;
     }
     let Ok(window) = WebviewWindowBuilder::new(
         app,
@@ -126,15 +135,16 @@ pub(crate) fn show_break_prompt(app: &AppHandle, locale: Locale) {
     .maximizable(false)
     .skip_taskbar(true)
     .always_on_top(true)
+    .focused(false)
     .visible(false)
     .build() else {
-        return;
+        return false;
     };
     position_prompt_on_main_monitor(app, &window, 460, 250);
     #[cfg(target_os = "macos")]
     let _ = window.set_visible_on_all_workspaces(true);
     let _ = window.show();
-    let _ = window.set_focus();
+    true
 }
 
 /// How long a nudge toast stays on screen. A nudge is advisory — it should read

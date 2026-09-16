@@ -16,16 +16,17 @@
 //! dedicated thread that owns nothing, and callers only ever read a cached
 //! answer to "will macOS actually draw a banner for us?".
 //!
-//! Correctness never depends on that answer. The engine starts a due break on
-//! its own once the grace period is up (see `TimerEngine::due_grace_seconds`),
-//! so a notification is an invitation and the cached capability only decides
-//! whether PausIO also needs to raise one of its own surfaces.
+//! Correctness never depends on that answer. The due-break surfaces a person
+//! acts on are PausIO's own windows (see `break_windows`), and the engine
+//! either waits for that answer or starts the break on its own once the grace
+//! period is up (see `TimerEngine::due_grace_seconds`), so a notification is
+//! an invitation and the cached capability only decides whether PausIO also
+//! needs to raise one of its own surfaces.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use pausio_core::{Settings, SystemSound};
-use tauri::AppHandle;
+use pausio_core::SystemSound;
 
 /// What macOS will do with a notification from PausIO right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,26 +98,7 @@ pub(crate) fn capability() -> Capability {
 /// Work handed to the notify thread. Everything here is allowed to be slow.
 enum Job {
     Refresh,
-    Post {
-        title: String,
-        body: String,
-    },
-    /// Boxed: this variant is several times the size of the others, and every
-    /// queued job would otherwise be padded out to match it.
-    Decision(Box<Decision>),
-}
-
-/// A due-break notification carrying "start now" / "postpone" buttons.
-struct Decision {
-    app: AppHandle,
-    title: String,
-    body: String,
-    start_label: String,
-    postpone_label: Option<String>,
-    /// How long the buttons stay meaningful. Past this the engine has already
-    /// started the break on its own, so the banner is cleared rather than left
-    /// behind as a stale, misleading control.
-    valid_for: std::time::Duration,
+    Post { title: String, body: String },
 }
 
 static QUEUE: OnceLock<std::sync::mpsc::Sender<Job>> = OnceLock::new();
@@ -176,29 +158,6 @@ pub(crate) fn post(title: &str, body: &str) -> Capability {
     state
 }
 
-/// Queues a due-break notification with action buttons and returns immediately.
-pub(crate) fn post_decision(
-    app: &AppHandle,
-    title: &str,
-    body: &str,
-    start_label: String,
-    postpone_label: Option<String>,
-    valid_for: std::time::Duration,
-) -> Capability {
-    let state = capability();
-    if let Some(sender) = queue() {
-        let _ = sender.send(Job::Decision(Box::new(Decision {
-            app: app.clone(),
-            title: title.into(),
-            body: body.into(),
-            start_label,
-            postpone_label,
-            valid_for,
-        })));
-    }
-    state
-}
-
 fn run(job: Job) {
     match job {
         Job::Refresh => {
@@ -212,58 +171,6 @@ fn run(job: Job) {
                 .title(&title)
                 .message(&body)
                 .send_blocking();
-        }
-        Job::Decision(decision) => {
-            let Decision {
-                app,
-                title,
-                body,
-                start_label,
-                postpone_label,
-                valid_for,
-            } = *decision;
-            if !ensure_authorized() {
-                return;
-            }
-            let mut notification = mac_usernotifications::Notification::new()
-                .title(&title)
-                .message(&body)
-                .action(mac_usernotifications::Action::button(
-                    crate::events::START_BREAK_ACTION,
-                    &start_label,
-                ))
-                .timeout(valid_for);
-            if let Some(label) = &postpone_label {
-                notification = notification.action(mac_usernotifications::Action::button(
-                    crate::events::POSTPONE_BREAK_ACTION,
-                    label,
-                ));
-            }
-            let Ok(handle) = notification.send_blocking() else {
-                return;
-            };
-            // Awaited on its own short-lived thread: this thread must stay free
-            // to deliver the next notification, and `valid_for` bounds how long
-            // the waiter can live.
-            let _ = std::thread::Builder::new()
-                .name("pausio-macos-notify-response".into())
-                .spawn(move || {
-                    let Ok(Ok(response)) =
-                        mac_usernotifications::block_on_current(handle.response())
-                    else {
-                        return;
-                    };
-                    let action = if response.is_default_action() {
-                        "default"
-                    } else if response.is_dismiss_action() || response.is_timed_out() {
-                        // Neither is a decision. The engine's grace period is
-                        // what guarantees the break happens.
-                        return;
-                    } else {
-                        &response.action_identifier
-                    };
-                    crate::events::apply_break_notification_choice(&app, action);
-                });
         }
     }
 }
@@ -325,12 +232,6 @@ fn probe() -> Capability {
 
 fn store(state: Capability) {
     CAPABILITY.store(state.to_code(), Ordering::Relaxed);
-}
-
-/// The break-due notification's buttons are only meaningful until the engine
-/// starts the break by itself, so this mirrors that window.
-pub(crate) fn decision_validity(settings: &Settings) -> std::time::Duration {
-    std::time::Duration::from_secs(u64::from(pausio_core::due_grace_seconds(settings)).max(5))
 }
 
 /// PausIO's own sound setting is independent of the system's per-app

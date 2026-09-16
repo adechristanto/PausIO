@@ -9,31 +9,26 @@ use crate::types::{EngineError, EngineEvent, SESSION_SCHEMA_VERSION, SessionChec
 /// a person who is mid-thought is not interrupted the instant a notification
 /// appears; bounded enough that the break is guaranteed to actually happen.
 pub(crate) const GENTLE_DUE_GRACE_SECONDS: u32 = 3 * 60;
-/// Balanced delivery advertises "prompt then overlay": the prompt gets the
-/// first word, and this is how long it keeps it before the overlay takes
-/// over. Deliberately short — the prompt is a courtesy, not a veto.
-pub(crate) const BALANCED_DUE_GRACE_SECONDS: u32 = 30;
 
 /// How long a due break waits for a person to act before starting itself.
 ///
-/// Notification-only delivery has no other surface to fall back to, so it keeps
-/// the long grace regardless of reminder style. Otherwise the style's own
-/// promise sets the length: Gentle is "notifications only" and stays unhurried;
-/// Balanced is "prompt then overlay" and hands over quickly; Firm and Strict are
-/// "fullscreen reminder", where waiting to be acknowledged contradicts the
-/// point — they raise the overlay on the next tick.
-///
-/// Public because the shell needs it too: it is exactly how long a break-due
-/// notification's buttons stay meaningful, and a banner left actionable past
-/// this point is a control that no longer matches the timer's state.
-pub fn due_grace_seconds(settings: &Settings) -> u32 {
+/// `None` means the due state waits indefinitely: Balanced delivery raises
+/// PausIO's own persistent prompt, a window that stays on screen until the
+/// person answers it, so that prompt — not a timeout — is the guarantee that
+/// the break cannot silently vanish behind a dismissed or undeliverable OS
+/// notification. Notification-only delivery has no window to lean on, so it
+/// keeps the long bounded grace regardless of reminder style; Gentle is
+/// "notifications only" and likewise stays unhurried but bounded; Firm and
+/// Strict are "fullscreen reminder", where waiting to be acknowledged
+/// contradicts the point — they raise the overlay on the next tick.
+pub fn due_grace_seconds(settings: &Settings) -> Option<u32> {
     if settings.display_target == DisplayTarget::NotificationOnly {
-        return GENTLE_DUE_GRACE_SECONDS;
+        return Some(GENTLE_DUE_GRACE_SECONDS);
     }
     match settings.strictness {
-        Strictness::Gentle => GENTLE_DUE_GRACE_SECONDS,
-        Strictness::Balanced => BALANCED_DUE_GRACE_SECONDS,
-        Strictness::Firm | Strictness::Strict => 0,
+        Strictness::Gentle => Some(GENTLE_DUE_GRACE_SECONDS),
+        Strictness::Balanced => None,
+        Strictness::Firm | Strictness::Strict => Some(0),
     }
 }
 #[derive(Debug, Clone)]
@@ -57,11 +52,13 @@ pub struct TimerEngine {
     pub(crate) posture_remaining: Option<u32>,
     pub(crate) hydration_remaining: Option<u32>,
     /// Counts down while a break sits `Due` with no active context, then the
-    /// break starts on its own. This is the engine's guarantee that a break
-    /// never depends on an acknowledgement that may never arrive; see
-    /// [`due_grace_seconds`] for how long each delivery style
-    /// waits. `None` outside `Due`, and deliberately not persisted across a
-    /// restart — a fresh grace on relaunch is the safe direction to err.
+    /// break starts on its own — the guarantee for the delivery styles whose
+    /// surface can disappear unnoticed (a dismissed OS notification). Styles
+    /// whose surface is persistent (Balanced's prompt waits to be answered)
+    /// resolve to no grace at all and this stays `None`; see
+    /// [`due_grace_seconds`]. `None` outside `Due`, and deliberately not
+    /// persisted across a restart — a fresh grace on relaunch is the safe
+    /// direction to err.
     pub(crate) due_grace_remaining: Option<u32>,
 }
 
@@ -434,17 +431,15 @@ impl TimerEngine {
             }
         }
         if let TimerPhase::BreakDue { kind } = self.phase.clone() {
-            // Every delivery style gets a bounded grace period and then the
-            // break starts on its own. Nothing outside the engine is allowed
-            // to be the *only* way out of `Due`: the shell's prompt and the
-            // OS notification can both fail to reach a person — a denied or
-            // unregistered notification permission, a dismissed banner, a
-            // Focus filter, an unclicked prompt — and a break that waits
-            // forever for an acknowledgement nobody gives is a timer that
-            // silently stops working. The grace length is what differs by
-            // style, not whether the guarantee exists.
-            if self.context.is_none() {
-                let grace = due_grace_seconds(&self.settings);
+            // Styles with a bounded grace start the break on their own once it
+            // runs out: nothing outside the engine is allowed to be the *only*
+            // way out of `Due` when the surface is an OS notification that can
+            // be dismissed or never delivered. Balanced resolves to no grace —
+            // its surface is PausIO's own prompt, a window that stays on
+            // screen until answered, so the wait itself is the guarantee.
+            if self.context.is_none()
+                && let Some(grace) = due_grace_seconds(&self.settings)
+            {
                 let remaining_grace = self.due_grace_remaining.get_or_insert(grace);
                 if seconds >= *remaining_grace {
                     let mut events = vec![];

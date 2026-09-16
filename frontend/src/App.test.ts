@@ -137,7 +137,8 @@ describe('Quiet Horizon app experience', () => {
       history_enabled: false,
       history_retention_days: 30,
       display_target: 'all',
-      auto_context_supported: false,
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
     })
     apiMock.getHealthReport.mockResolvedValue('{\n  "platform": "macos"\n}')
     apiMock.testReminder.mockResolvedValue(undefined)
@@ -218,12 +219,13 @@ describe('Quiet Horizon app experience', () => {
     expect(await screen.findByRole('heading', { name: 'Next eye break' })).toBeTruthy()
     expect(await findClock('19:48')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Eye break now' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Pause timer' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pause reminders' })).toBeTruthy()
     const summary = screen.getByLabelText('Today’s summary')
     expect(summary.textContent?.replace(/\s+/g, ' ')).toContain('2 Short breaks')
     expect(screen.queryByText('Reminder style')).toBeNull()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Pause timer' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Pause reminders' }))
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Until you resume' }))
     await waitFor(() => expect(apiMock.pause).toHaveBeenCalledTimes(1))
     expect(await screen.findByRole('button', { name: 'Resume' })).toBeTruthy()
   })
@@ -292,7 +294,7 @@ describe('Quiet Horizon app experience', () => {
     )
   })
 
-  it('leaves timed pauses to the tray menu and still reports when PausIO resumes', async () => {
+  it('offers a "Pause reminders for…" menu on the dashboard with timed and indefinite choices', async () => {
     let pushState: ((next: Snapshot) => void) | undefined
     apiMock.onState.mockImplementation(async (listener: (next: Snapshot) => void) => {
       pushState = listener
@@ -301,11 +303,13 @@ describe('Quiet Horizon app experience', () => {
     render(App)
     await screen.findByRole('button', { name: 'Eye break now' })
 
-    // "Pause for 30/60/120 minutes" is a tray-menu affordance. The window must not
-    // duplicate it, but it still has to explain a timed pause the tray started.
-    expect(screen.queryByRole('button', { name: 'Pause for' })).toBeNull()
-    expect(screen.queryByLabelText('Pause for')).toBeNull()
-    expect(apiMock.pauseForMinutes).not.toHaveBeenCalled()
+    const trigger = screen.getByRole('button', { name: 'Pause reminders' })
+    expect(trigger).toBeTruthy()
+    await fireEvent.click(trigger)
+
+    const menu = screen.getByRole('menu', { name: 'Pause reminders' })
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Pause 30 min' }))
+    await waitFor(() => expect(apiMock.pauseForMinutes).toHaveBeenCalledWith(30))
 
     pushState!({
       ...snapshot,
@@ -313,6 +317,18 @@ describe('Quiet Horizon app experience', () => {
       paused_until: '2026-07-27T15:30:00Z',
     })
     expect(await screen.findByText(/Resumes at/)).toBeTruthy()
+    // No pause menu while already paused -- resume is the only affordance.
+    expect(screen.queryByRole('button', { name: 'Pause reminders' })).toBeNull()
+  })
+
+  it('offers "Until you resume" as an indefinite pause choice in the dashboard menu', async () => {
+    render(App)
+    await screen.findByRole('button', { name: 'Eye break now' })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Pause reminders' }))
+    const menu = screen.getByRole('menu', { name: 'Pause reminders' })
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Until you resume' }))
+    await waitFor(() => expect(apiMock.pause).toHaveBeenCalledOnce())
   })
 
   it('keeps the .horizon-timer strong contract the e2e suite depends on', async () => {
@@ -437,7 +453,8 @@ describe('Quiet Horizon app experience', () => {
       history_enabled: false,
       history_retention_days: 30,
       display_target: 'all',
-      auto_context_supported: false,
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
     })
     apiMock.getWatchStatus.mockResolvedValue({
       platform: 'ios',
@@ -580,6 +597,38 @@ describe('Quiet Horizon app experience', () => {
     expect(await screen.findByText('Saved')).toBeTruthy()
   })
 
+  it('does not drop an edit made while a previous save is still in flight', async () => {
+    let resolveFirstSave: ((value: Settings) => void) | undefined
+    const firstSave = new Promise<Settings>((resolve) => {
+      resolveFirstSave = resolve
+    })
+    apiMock.setSettings.mockImplementationOnce(() => firstSave)
+    apiMock.setSettings.mockImplementation(async (next) => next)
+
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByRole('heading', { name: 'Settings' })
+
+    const range = screen.getByRole('slider', { name: 'Time between breaks' })
+    await fireEvent.input(range, { target: { value: '1800' } })
+    await waitFor(() => expect(apiMock.setSettings).toHaveBeenCalledTimes(1))
+
+    // A second edit arrives while the first save is still unresolved -- it must
+    // be queued and replayed, not silently dropped by the isSaving guard.
+    await fireEvent.input(range, { target: { value: '2400' } })
+    await new Promise((resolve) => setTimeout(resolve, 500)) // let the 450ms debounce fire
+    expect(apiMock.setSettings).toHaveBeenCalledTimes(1) // still queued, not yet sent
+
+    resolveFirstSave?.({ ...settings, work_seconds: 1800 })
+    await waitFor(() =>
+      expect(apiMock.setSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ work_seconds: 2400 })
+      )
+    )
+    expect(apiMock.setSettings).toHaveBeenCalledTimes(2)
+  })
+
   it('marks the schedule time inputs with the app language, not the OS default, so 24h/AM-PM formatting follows German', async () => {
     render(App)
     await screen.findByRole('heading', { name: 'Next eye break' })
@@ -653,9 +702,9 @@ describe('Quiet Horizon app experience', () => {
     await screen.findByRole('heading', { name: 'Next eye break' })
     await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     await screen.findByRole('heading', { name: 'Settings' })
-    // The header's close button is the "leave Settings" affordance — Settings and
+    // The header's back button is the "leave Settings" affordance — Settings and
     // History are peer destinations reached via the sidebar, not a modal stack.
-    await fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Back to dashboard' }))
     await screen.findByRole('heading', { name: 'Next eye break' })
 
     await new Promise((resolve) => setTimeout(resolve, 500))
@@ -728,7 +777,8 @@ describe('Quiet Horizon app experience', () => {
     })
     render(App)
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Pause timer' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Pause reminders' }))
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Until you resume' }))
     expect((await screen.findByRole('alert')).textContent).toContain(
       'This timer cannot be paused right now.'
     )
@@ -846,6 +896,47 @@ describe('Quiet Horizon app experience', () => {
     )
   })
 
+  it('warns about unparseable fixed break entries instead of silently dropping them', async () => {
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Schedule' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'More settings' }))
+    const textarea = (await screen.findByLabelText('Fixed break times')) as HTMLTextAreaElement
+
+    await fireEvent.input(textarea, { target: { value: '12:30, garbage, 9:15' } })
+    await fireEvent.blur(textarea)
+
+    expect(await screen.findByText("Couldn't understand: garbage — removed.")).toBeTruthy()
+    await waitFor(() =>
+      expect(apiMock.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ fixed_break_minutes: [555, 750] })
+      )
+    )
+  })
+
+  it('warns when more than 12 fixed break times are entered instead of silently capping them', async () => {
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Schedule' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'More settings' }))
+    const textarea = (await screen.findByLabelText('Fixed break times')) as HTMLTextAreaElement
+
+    // 13 distinct 5-minute-apart times (00:00 through 01:00), so the cap -- not
+    // deduplication -- is what trims the list down to 12.
+    const times = Array.from({ length: 13 }, (_, i) => {
+      const minutes = i * 5
+      return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+    }).join(', ')
+    await fireEvent.input(textarea, { target: { value: times } })
+    await fireEvent.blur(textarea)
+
+    expect(
+      await screen.findByText('Only the first 12 fixed times are kept; 1 removed.')
+    ).toBeTruthy()
+  })
+
   it('lets you type a break message with a trailing space without it being stripped mid-edit', async () => {
     render(App)
     await screen.findByRole('heading', { name: 'Next eye break' })
@@ -941,12 +1032,14 @@ describe('Quiet Horizon app experience', () => {
       // "Notification only" was a display target that silently overrode strictness;
       // it is now a mode, so the pair can no longer disagree.
       expect(screen.queryByText('Notification only')).toBeNull()
-      expect(screen.getByText('Ask first, then cover the screen')).toBeTruthy()
+      expect(screen.getByText('Ask first, with a floating prompt')).toBeTruthy()
     })
 
     it('explains the selected mode, which the old bare select never did', async () => {
       const picker = await openDelivery()
-      expect(screen.getByText(/A notification asks you to start now or postpone/)).toBeTruthy()
+      expect(
+        screen.getByText(/A small floating prompt asks you to start now or postpone/)
+      ).toBeTruthy()
 
       await fireEvent.change(picker, { target: { value: 'hold' } })
       expect(await screen.findByText(/an emergency exit is always available/)).toBeTruthy()
@@ -1010,7 +1103,7 @@ describe('Quiet Horizon app experience', () => {
       const summary = await screen.findByText(/Every 20 minutes: a break of 20 seconds/)
       expect(summary.textContent).toContain('Active Mon\u2013Fri, 09:00 until 18:00.')
       expect(summary.textContent).toContain('A heads-up arrives 30 seconds beforehand.')
-      expect(summary.textContent).toContain('the break covers all displays')
+      expect(summary.textContent).toContain('the break starts when you choose it')
     })
 
     it('recomputes when a setting changes, so the effect is visible immediately', async () => {
@@ -1147,6 +1240,57 @@ describe('Quiet Horizon app experience', () => {
       expect(await screen.findByRole('heading', { name: 'Next eye break' })).toBeTruthy()
     })
 
+    it('shows a visible failure instead of a false "Break started" when the test break command fails', async () => {
+      apiMock.getOnboardingState.mockResolvedValue(false)
+      apiMock.takeBreakNow.mockRejectedValue(new Error('offline'))
+      render(App)
+      const wizard = () => within(screen.getByRole('dialog'))
+      await screen.findByRole('heading', { name: 'Welcome to PausIO' })
+
+      await fireEvent.click(wizard().getByRole('button', { name: 'Get Started' }))
+      await fireEvent.click(wizard().getByRole('button', { name: 'Next' }))
+      await fireEvent.click(wizard().getByRole('button', { name: 'Next' }))
+      await wizard().findByRole('heading', { name: 'See it for yourself' })
+
+      await fireEvent.click(wizard().getByRole('button', { name: 'Eye break now' }))
+      await waitFor(() => expect(apiMock.takeBreakNow).toHaveBeenCalledOnce())
+      expect(
+        await wizard().findByText(
+          "Couldn't start the test break. You can try again or continue setup."
+        )
+      ).toBeTruthy()
+      expect(wizard().queryByText(/look away for a moment/)).toBeNull()
+    })
+
+    it('hides the desktop-only "cover which displays" choice from onboarding on a phone host', async () => {
+      apiMock.getOnboardingState.mockResolvedValue(false)
+      apiMock.getDesktopHealth.mockResolvedValue({
+        platform: 'ios',
+        notification_permission: 'unavailable',
+        display_count: 0,
+        autostart_supported: false,
+        autostart_enabled: false,
+        history_enabled: false,
+        history_retention_days: 30,
+        display_target: 'all',
+        auto_context_fullscreen_supported: false,
+        auto_context_dnd_supported: false,
+      })
+      render(App)
+      await screen.findByRole('heading', { name: 'Welcome to PausIO' })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Get Started' }))
+      await fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
+      expect(
+        await screen.findByRole('heading', { name: 'How should breaks interrupt you?' })
+      ).toBeTruthy()
+
+      // "Ask" (the default/recommended mode) still covers the screen, so this choice
+      // would normally appear here -- it must not on a phone, where there is no
+      // concept of "which monitor" to cover.
+      expect(screen.queryByText('Cover which displays')).toBeNull()
+    })
+
     it('lets a schedule choice made during onboarding reach the saved settings', async () => {
       apiMock.getOnboardingState.mockResolvedValue(false)
       render(App)
@@ -1207,6 +1351,23 @@ describe('Quiet Horizon app experience', () => {
       expect(screen.getByRole('combobox', { name: 'Blink reminder' })).toBeTruthy()
       // The query itself clears so the result list does not linger over the pane.
       expect(document.querySelector('.settings-search-results')).toBeNull()
+    })
+
+    it('moves focus to the matched control itself, not just its pane', async () => {
+      render(App)
+      await screen.findByRole('heading', { name: 'Next eye break' })
+      await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      await screen.findByRole('heading', { name: 'Breaks' })
+
+      await fireEvent.input(screen.getByRole('searchbox', { name: 'Search settings' }), {
+        target: { value: 'blink' },
+      })
+      await fireEvent.click(await screen.findByRole('option', { name: /Blink reminder/ }))
+
+      // A right pane and an opened disclosure are not enough -- the whole point of a
+      // search result is that the control itself is where the keyboard lands next.
+      const control = await screen.findByRole('combobox', { name: 'Blink reminder' })
+      await waitFor(() => expect(document.activeElement).toBe(control))
     })
 
     it('does not force "More settings" open for a result that is in the default view', async () => {

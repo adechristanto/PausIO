@@ -1,5 +1,9 @@
 :root {
   color-scheme: dark light;
+  /* Single point of truth for helper/caption text: readability floor, not a design
+     choice per-instance -- 9-12.5px caption sizes across the app were below a
+     comfortable reading size, so every such declaration now points here. */
+  --font-size-caption: 13px;
   --canvas: #0b0d12;
   --canvas-elevated: #11141b;
   --surface: #151923;
@@ -604,13 +608,13 @@ svg {
 }
 .settings-search-results button small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 .settings-search-empty {
   margin: 0;
   padding: 8px 10px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .sidebar-subnav {
   display: grid;
@@ -745,6 +749,11 @@ svg {
 }
 .header-action:hover svg {
   transform: rotate(90deg);
+}
+/* A back-chevron, not the X this hover spin was designed for -- a nudge left
+   reads as "go back", where a 90deg spin would not. */
+.header-action-back:hover svg {
+  transform: translateX(-2px);
 }
 .header-action:active {
   transform: scale(0.92);
@@ -905,7 +914,7 @@ svg {
 }
 .profile-grid small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .profile-grid span {
   display: flex;
@@ -922,7 +931,7 @@ svg {
 .quiet-menu-hint {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   line-height: 1.5;
 }
 .quiet-menu-field {
@@ -931,7 +940,7 @@ svg {
 }
 .quiet-menu-field span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .quiet-menu-field select {
@@ -949,7 +958,7 @@ svg {
 .settings-status {
   min-width: 42px;
   color: var(--success);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
   text-align: right;
 }
@@ -1001,7 +1010,7 @@ svg {
   border-radius: 50%;
   color: var(--canvas);
   background: var(--danger);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 800;
 }
 
@@ -1040,7 +1049,7 @@ svg {
    (watchOS-style); its color follows the same tone recipe as the ring itself. */
 .phase-status {
   margin: 0 0 18px;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1216,6 +1225,13 @@ svg {
   flex: 1;
   min-width: 120px;
 }
+.timer-actions > .pause-menu-wrap {
+  flex: 1;
+  min-width: 120px;
+}
+.timer-actions > .pause-menu-wrap > .button {
+  width: 100%;
+}
 .pause-resumes {
   margin: 0;
   color: var(--text-muted);
@@ -1305,7 +1321,7 @@ svg {
 }
 .daily-summary dt {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 570;
 }
 
@@ -1379,7 +1395,7 @@ svg {
 }
 .history-list span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   white-space: nowrap;
 }
 /* No drop shadow here either (E23) — main added the history_range picker (a variable number
@@ -1476,7 +1492,7 @@ svg {
 .analytics-toolbar > p {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .analytics-ranges {
@@ -1493,7 +1509,7 @@ svg {
   padding: 0 12px;
   color: var(--text-tertiary);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 680;
 }
 .analytics-ranges button:hover {
@@ -1530,7 +1546,7 @@ svg {
 .analytics-eyebrow {
   margin: 0 0 10px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 760;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -1552,7 +1568,7 @@ svg {
   padding: 4px 8px;
   color: var(--text-secondary);
   background: var(--surface-raised);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
 }
 .analytics-hero-value > span.positive {
@@ -1569,7 +1585,7 @@ svg {
   display: block;
   margin-top: 5px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 .analytics-today-card {
   display: grid;
@@ -1608,7 +1624,7 @@ svg {
   border-radius: 999px;
   padding: 4px 8px;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .analytics-kpis {
@@ -1629,7 +1645,7 @@ svg {
 }
 .analytics-kpis dt {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 680;
 }
 .analytics-kpis dd {
@@ -1644,7 +1660,7 @@ svg {
 }
 .analytics-kpis dd span {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -1679,7 +1695,7 @@ svg {
   max-width: 420px;
   margin: 6px 0 0;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   line-height: 1.45;
 }
 .routine-score-breakdown {
@@ -1699,7 +1715,7 @@ svg {
 }
 .routine-score-breakdown dt {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   font-weight: 670;
 }
 .routine-score-breakdown dd {
@@ -1710,7 +1726,7 @@ svg {
 }
 .routine-score-breakdown dd span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 .analytics-insight {
   display: flex;
@@ -1748,7 +1764,7 @@ svg {
 .analytics-insight div > p:last-child {
   margin: 6px 0 0;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 .analytics-insight-action {
   min-height: 32px;
@@ -1758,7 +1774,7 @@ svg {
   padding: 0 10px;
   color: var(--accent);
   background: var(--surface);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 680;
 }
 .analytics-insight-action:hover {
@@ -1774,7 +1790,7 @@ svg {
 .analytics-more-insights summary {
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 680;
 }
 .analytics-more-insights ul {
@@ -1786,7 +1802,7 @@ svg {
 }
 .analytics-more-insights li {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   line-height: 1.45;
 }
 .analytics-patterns {
@@ -1805,7 +1821,7 @@ svg {
 .analytics-patterns article > p {
   margin: 0 0 10px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   font-weight: 680;
   text-transform: uppercase;
 }
@@ -1818,7 +1834,7 @@ svg {
 .analytics-patterns strong {
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1842,7 +1858,7 @@ svg {
 }
 .analytics-patterns small {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--font-size-caption);
 }
 .analytics-milestones {
   display: grid;
@@ -1866,11 +1882,11 @@ svg {
   border-radius: 50%;
   color: var(--success);
   background: color-mix(in srgb, var(--success) 11%, transparent);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 .analytics-milestones strong {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .analytics-section,
@@ -1893,14 +1909,14 @@ svg {
 .analytics-section-heading p {
   margin: 5px 0 0;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .analytics-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 13px;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .analytics-legend span::before {
@@ -1962,7 +1978,7 @@ svg {
 }
 .analytics-bar small {
   overflow: hidden;
-  font-size: 10px;
+  font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1973,7 +1989,7 @@ svg {
   padding: 0 31px 0 11px;
   color: var(--text-secondary);
   background: var(--surface-input);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 630;
 }
 .activity-days {
@@ -1988,12 +2004,12 @@ svg {
 .activity-day h3 {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
 }
 .activity-day header span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 .activity-day ul {
   margin: 0;
@@ -2034,13 +2050,13 @@ svg {
 }
 .activity-day li strong {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 670;
 }
 .activity-day li div span,
 .activity-day li > small {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-caption);
 }
 .activity-day li > small {
   text-align: right;
@@ -2053,7 +2069,7 @@ svg {
 .analytics-data-footer > p {
   margin: 0 0 17px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
 }
 .analytics-empty-state {
   display: grid;
@@ -2228,7 +2244,7 @@ svg {
   display: block;
   margin-top: 4px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .stepper {
   display: flex;
@@ -2351,7 +2367,7 @@ svg {
 }
 .message-row small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 500;
 }
 .message-row textarea {
@@ -2375,7 +2391,7 @@ svg {
 }
 .strictness-row small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -2417,7 +2433,7 @@ svg {
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   background: var(--surface-input);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .day-picker button:hover {
@@ -2458,7 +2474,7 @@ svg {
 }
 .toggle-row small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .toggle-row input {
   width: 42px;
@@ -2762,7 +2778,7 @@ svg {
   color: var(--text-secondary);
   background: var(--canvas-elevated);
   box-shadow: var(--shadow-soft);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   pointer-events: none;
   opacity: 0;
@@ -3105,7 +3121,7 @@ svg {
 .prompt-actions .button {
   min-height: 40px;
   padding: 0 6px;
-  font-size: 12.5px;
+  font-size: var(--font-size-caption);
 }
 .prompt-menu-wrap {
   position: relative;
@@ -3145,10 +3161,46 @@ svg {
   outline: none;
 }
 
+.pause-menu-wrap {
+  position: relative;
+  display: grid;
+}
+.pause-menu {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: calc(100% + 6px);
+  display: grid;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid #dce5ff24;
+  border-radius: 10px;
+  background: #131722;
+  box-shadow: 0 12px 30px #0000008a;
+}
+.pause-menu [role='menuitem'] {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #dfe6f6;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pause-menu [role='menuitem']:hover,
+.pause-menu [role='menuitem']:focus-visible {
+  color: #ffffff;
+  background: #ffffff14;
+  outline: none;
+}
+
 .setting-note {
   margin: 14px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .health-report {
   width: 100%;
@@ -3269,7 +3321,7 @@ svg {
     gap: 4px;
   }
   .day-picker button {
-    font-size: 11px;
+    font-size: var(--font-size-caption);
   }
   .break-prompt {
     min-width: 0;
@@ -3368,7 +3420,7 @@ svg {
 }
 .mobile-shell .settings-status {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 
 .mobile-shell .mobile-settings-nav {
@@ -3458,7 +3510,7 @@ svg {
 }
 .mobile-shell .phase-status {
   margin: 0 0 10px;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 760;
   letter-spacing: 0.15em;
 }
@@ -3563,7 +3615,7 @@ svg {
 }
 .mobile-shell .daily-summary dt {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 580;
 }
 .mobile-shell .dashboard-dock {
@@ -3759,7 +3811,7 @@ svg {
   border-color: transparent;
   border-radius: 12px;
   background: var(--surface-input);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .mobile-shell .toggle-row {
   min-height: 68px;
@@ -4006,11 +4058,27 @@ svg {
   .button:not(:disabled):active {
     transform: none;
   }
-  .diagnostics-trigger svg {
+  .diagnostics-trigger svg,
+  .advanced-trigger svg {
     transition: none;
   }
   .ring-endpoint {
     transition: none;
+  }
+  /* Window-close and header-action icons otherwise spring-scale/rotate on hover via a
+     bounce cubic-bezier -- overshoot easing is exactly the motion this preference asks
+     to remove, even though each individual transition is brief. */
+  .window-close-button,
+  .window-close-button svg,
+  .header-action,
+  .header-action svg {
+    transition: none;
+  }
+  .window-close-button:hover,
+  .header-action:hover,
+  .header-action:hover svg,
+  .header-action-back:hover svg {
+    transform: none;
   }
   /* Shortened, not skipped: an instant slam to near-black is worse for a photosensitive
      user than a brisk 150ms fade — the one motion this overlay keeps under Reduce Motion. */
@@ -4086,7 +4154,7 @@ svg {
 }
 .settings-summary strong {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4142,7 +4210,7 @@ svg {
   border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
   cursor: pointer;
   transition: all 120ms ease-out;
@@ -4161,7 +4229,7 @@ svg {
 }
 .onboarding-step-label {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4273,7 +4341,7 @@ svg {
   border-radius: 999px;
   background: var(--surface-input);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   cursor: pointer;
   transition: all 150ms ease-out;
@@ -4331,7 +4399,7 @@ svg {
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--accent);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;

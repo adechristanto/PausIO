@@ -248,27 +248,6 @@ pub fn notification_due_body(locale: Locale) -> &'static str {
     }
 }
 
-pub fn notification_start_short_action(locale: Locale, seconds: u32) -> String {
-    match locale {
-        Locale::En => format!("Start {seconds}s break"),
-        Locale::De => format!("{seconds}-Sekunden-Pause starten"),
-    }
-}
-
-pub fn notification_start_long_action(locale: Locale, minutes: u32) -> String {
-    match locale {
-        Locale::En => format!("Start {minutes}m break"),
-        Locale::De => format!("{minutes}-Minuten-Pause starten"),
-    }
-}
-
-pub fn notification_postpone_action(locale: Locale) -> &'static str {
-    match locale {
-        Locale::En => "Postpone 2 min",
-        Locale::De => "2 Min. verschieben",
-    }
-}
-
 pub fn notification_started_title(locale: Locale) -> &'static str {
     match locale {
         Locale::En => "PausIO eye break",
@@ -333,7 +312,5 @@ mod tests {
     fn templated_strings_interpolate_the_given_value() {
         assert!(tray_next_break_in(Locale::En, "05:00").contains("05:00"));
         assert!(tray_waiting(Locale::De, "im Vollbild").contains("im Vollbild"));
-        assert!(notification_start_short_action(Locale::En, 20).contains("20"));
-        assert!(notification_start_long_action(Locale::De, 5).contains('5'));
     }
 }

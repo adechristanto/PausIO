@@ -156,7 +156,11 @@ function aggregate(key: string, values: DailyCompliance[]): DailyCompliance {
   return {
     key,
     ...total,
-    percent: total.due === 0 ? null : Math.round((total.completed / total.due) * 100),
+    // Denominator is `resolved` (completed + ended_early + missed), not `due`
+    // (which also counts breaks still pending) -- matching the wording next
+    // to it ("N of M resolved breaks completed") and metricGroups() below,
+    // rather than the two disagreeing (e.g. "25%" beside "1 of 1 resolved").
+    percent: total.resolved === 0 ? null : Math.round((total.completed / total.resolved) * 100),
   }
 }
 
@@ -282,7 +286,7 @@ function dailyFromOpportunities(
   }
   return [...byDay.values()].map((day) => ({
     ...day,
-    percent: day.due === 0 ? null : Math.round((day.completed / day.due) * 100),
+    percent: day.resolved === 0 ? null : Math.round((day.completed / day.resolved) * 100),
   }))
 }
 

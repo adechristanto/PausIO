@@ -27,6 +27,7 @@ const english = {
   break_pause_30: 'Pause 30 min',
   break_pause_60: 'Pause 1 hr',
   break_pause_120: 'Pause 2 hr',
+  break_pause_until_resumed: 'Until you resume',
   break_done: 'I’m back',
   break_end_early: 'End break early',
   break_emergency_end: 'End break early (emergency)',
@@ -113,7 +114,7 @@ const english = {
   posture_off: 'Off',
   setting_hydration_nudge: 'Hydration reminder',
   hydration_off: 'Off',
-  settings_close: 'Done',
+  settings_back: 'Back to dashboard',
   settings_saved: 'Saved',
   saving: 'Saving…',
 
@@ -134,14 +135,14 @@ const english = {
   strictness_gentle_hint:
     "A quiet notification lets you know when it's due, and again once the break starts. Your screen is left alone \u2014 PausIO opens a window only if the notification cannot be shown.",
   strictness_balanced_hint:
-    "A notification asks you to start now or postpone. If you don't respond, a small prompt appears, then the break starts on its own.",
+    'A small floating prompt asks you to start now or postpone, and waits in the corner of your screen until you answer.',
   strictness_firm_hint:
     'The moment a break is due, a fullscreen reminder appears immediately — no notification first.',
   strictness_strict_hint:
     'A fullscreen reminder appears immediately, with no notification first. Quitting PausIO is disabled during breaks, but an emergency exit is always available.',
   setting_delivery_mode: 'How breaks appear',
   delivery_mode_notify: 'Just notify me',
-  delivery_mode_ask: 'Ask first, then cover the screen',
+  delivery_mode_ask: 'Ask first, with a floating prompt',
   delivery_mode_cover: 'Cover the screen right away',
   delivery_mode_hold: 'Cover the screen and hold it',
   delivery_no_notice_warning:
@@ -164,6 +165,8 @@ const english = {
     'Reads only the OS Do Not Disturb / Focus state — never which app or Focus is active.',
   auto_detect_unsupported:
     'Not available on this platform yet. Breaks will not defer automatically here.',
+  auto_detect_dnd_unsupported:
+    'Automatic Do Not Disturb detection is not available on this platform yet — there is no way to read it without extra permissions. Fullscreen detection above still works.',
 
   setting_display_target: 'Cover which displays',
   display_all: 'All displays',
@@ -178,8 +181,13 @@ const english = {
   setting_show_clock: 'Show the current time during breaks',
   setting_show_clock_hint:
     'A small clock on the break shield, for anyone who prefers to know how long they have been away.',
-  setting_notification_sound: 'Play a system notification sound',
-  setting_notification_sound_hint: 'PausIO never records audio. Visual reminders remain available.',
+  setting_sound_timing: 'Play a sound',
+  setting_sound_timing_hint:
+    'When the break reminder appears, when a break ends on its own, both, or never. PausIO never records audio.',
+  sound_timing_banner: 'When the reminder appears',
+  sound_timing_end: 'When a break ends',
+  sound_timing_both: 'Reminder and break end',
+  sound_timing_silent: 'Silent',
   setting_notification_sound_name: 'Sound',
   system_sound_default: 'Default',
   system_sound_chime: 'Chime',
@@ -222,7 +230,7 @@ const english = {
   analytics_pending_count: '{count} pending',
   analytics_postponed_count: '{count} postponed',
   analytics_early_count: '{count} ended early',
-  analytics_healthy_days: 'Healthy workdays',
+  analytics_healthy_days: 'Days on track',
   analytics_current_run: 'Current run',
   analytics_day_unit_one: ' day',
   analytics_day_unit_other: ' days',
@@ -301,12 +309,6 @@ const english = {
   shortcut_record: 'Record',
   shortcut_clear: 'Clear',
   shortcut_recording: 'Press a key combination…',
-  setting_sound_theme: 'Break-end sound',
-  sound_theme_silence: 'Silent',
-  sound_theme_chime: 'Chime',
-  sound_theme_tone: 'Tone',
-  sound_theme_click: 'Click',
-  setting_sound_volume: 'Volume',
   nudge_blink_announcement: 'Gentle reminder: blink slowly five times.',
   nudge_posture_announcement: 'Gentle reminder: check your posture.',
   nudge_hydration_announcement: 'Gentle reminder: consider a glass of water.',
@@ -317,7 +319,11 @@ const english = {
   daily_focus_limit_off: 'Off',
   history_days: '{value} days',
   history_unlimited: 'Until I clear it',
+  setting_show_routine_score: 'Show Routine Score (experimental)',
+  setting_show_routine_score_hint:
+    'A weighted 70/20/10 score of follow-through, timing, and consistency. Its weighting has not been validated, so it stays hidden by default.',
   diagnostics_heading: 'Desktop health',
+  diagnostics_app_version: 'Version {version}',
   diagnostics_permission: 'Notifications: {state}',
   diagnostics_displays: 'Displays detected: {count}',
   diagnostics_test_reminder: 'Test reminder',
@@ -369,6 +375,15 @@ const english = {
   watch_state_unreachable: 'Paired, not reachable',
   watch_state_unpaired: 'No watch paired',
   watch_state_unavailable: 'Not available on desktop',
+  wearable_action_unavailable: 'Watch companion isn’t available on this device.',
+  wearable_action_unpaired: 'Pair your watch in the Watch app, then open PausIO on it.',
+  wearable_action_app_not_installed: 'Install PausIO on your watch from the Watch app’s App Store.',
+  wearable_action_activating: 'Setting up your watch — this can take a minute.',
+  wearable_action_disconnected:
+    'Bring your watch and phone close together, then try syncing again.',
+  wearable_action_degraded:
+    'Reminders may be delayed on your watch — check its connection and try syncing again.',
+  wearable_action_connected: 'Your watch is receiving reminders.',
   wearables_heading: 'Wearables',
   wearables_hint:
     'Install the paired app, allow reminders, and keep this status healthy. Test buzz confirms delivery only.',
@@ -408,7 +423,6 @@ const english = {
   settings_error_hydration_nudge: 'Hydration reminder must be every 15 to 120 minutes, or off.',
   settings_error_global_shortcut:
     'Keyboard shortcuts must be 1 to 40 characters, or empty to disable.',
-  settings_error_sound_volume: 'Volume must be 0 to 100.',
   summary_heading: 'What this adds up to',
   summary_schedule: 'Active {days}, {start} until {end}.',
   summary_schedule_all_day: 'Active {days}, around the clock.',
@@ -418,7 +432,7 @@ const english = {
   summary_delivery_notify:
     'Breaks are announced by notification only \u2014 your screen is never covered.',
   summary_delivery_ask:
-    'A notification asks first; if you do not answer, the break covers {displays}.',
+    'A floating prompt asks first and waits for your answer — the break starts when you choose it.',
   summary_delivery_cover: 'Breaks cover {displays} straight away.',
   summary_delivery_hold:
     'Breaks cover {displays} straight away, and PausIO cannot be quit until they end.',
@@ -440,15 +454,16 @@ const english = {
   section_sound: 'Sound',
   setting_longer_breaks: 'Longer breaks',
   setting_longer_breaks_hint: 'A break comes back longer every so often, for extra recovery time.',
-  sound_windows_note:
-    'On Windows, every theme plays your system default alert, and this volume has no effect \u2014 both follow the Windows alert volume instead.',
+  sound_windows_note: 'On Windows, the chosen sound plays at your Windows alert volume.',
   fixed_break_outside_hours_warning:
     '{time} is outside your active hours, so this break will never happen.',
+  fixed_break_unparseable_warning: "Couldn't understand: {entries} — removed.",
+  fixed_break_overflow_warning: 'Only the first 12 fixed times are kept; {count} removed.',
   presets_heading: 'Start from a preset',
   preset_classic: 'Classic 20-20-20',
   preset_gentle: 'Gentle',
   preset_focus_blocks: 'Focus blocks',
-  preset_eye_strain_recovery: 'Eye-strain recovery',
+  preset_eye_strain_recovery: 'Frequent eye breaks',
   preset_applied: '{name} applied.',
   action_pause_reminders: 'Pause reminders',
   pause_reminders_hint: 'Defers the next break locally. Nothing is recorded about why.',
@@ -465,8 +480,7 @@ const english = {
   onboarding_welcome_subhead:
     'Mindful eye breaks and posture resets that protect your focus and energy.',
   onboarding_feature_breaks_title: '20-20-20 Eye Breaks',
-  onboarding_feature_breaks_body:
-    'Periodic micro-pauses scientifically designed to reduce screen fatigue.',
+  onboarding_feature_breaks_body: 'Regular micro-breaks to ease eye strain from screen work.',
   onboarding_feature_posture_title: 'Posture & Hydration',
   onboarding_feature_posture_body:
     'Gentle nudges to blink, stretch, and stay hydrated throughout the day.',
@@ -475,7 +489,8 @@ const english = {
     'Runs strictly offline on your device with zero telemetry or tracking.',
   delivery_mode_notify_desc:
     'Discreet system notification banner. Best if you are frequently in calls.',
-  delivery_mode_ask_desc: 'Floating prompt with instant take or postpone actions.',
+  delivery_mode_ask_desc:
+    'Floating prompt with instant take or postpone actions. Stays on screen until you respond — it never starts the break for you.',
   delivery_mode_cover_desc:
     'Full-screen soothing shield across your displays for a genuine eye rest.',
   delivery_mode_hold_desc: 'Strict full-screen shield that prevents early dismissal.',
@@ -489,6 +504,8 @@ const english = {
   onboarding_try_body:
     "Take a real short break right now, so you know exactly what to expect later. This won't count against anything.",
   onboarding_try_done: 'Break started \u2014 look away for a moment.',
+  onboarding_test_break_failed:
+    "Couldn't start the test break. You can try again or continue setup.",
 } as const
 
 export type LocalizationKey = keyof typeof english
@@ -516,6 +533,7 @@ const german: Record<LocalizationKey, string> = {
   break_pause_30: '30 Min. pausieren',
   break_pause_60: '1 Std. pausieren',
   break_pause_120: '2 Std. pausieren',
+  break_pause_until_resumed: 'Bis du fortsetzt',
   break_done: 'Ich bin zurück',
   break_end_early: 'Pause vorzeitig beenden',
   break_emergency_end: 'Pause vorzeitig beenden (Notfall)',
@@ -598,7 +616,7 @@ const german: Record<LocalizationKey, string> = {
   posture_off: 'Aus',
   setting_hydration_nudge: 'Trink-Erinnerung',
   hydration_off: 'Aus',
-  settings_close: 'Fertig',
+  settings_back: 'Zurück zum Dashboard',
   settings_saved: 'Gespeichert',
   saving: 'Wird gespeichert…',
   setting_work_interval: 'Zeit zwischen Pausen',
@@ -618,14 +636,14 @@ const german: Record<LocalizationKey, string> = {
   strictness_gentle_hint:
     'Eine unaufdringliche Benachrichtigung informiert dich, wenn eine Pause fällig ist, und noch einmal, wenn sie beginnt. Dein Bildschirm bleibt unberührt — PausIO öffnet nur dann ein Fenster, wenn die Benachrichtigung nicht angezeigt werden kann.',
   strictness_balanced_hint:
-    'Eine Benachrichtigung fragt, ob du jetzt starten oder verschieben möchtest. Reagierst du nicht, erscheint ein kleiner Hinweis, danach startet die Pause von selbst.',
+    'Ein kleines schwebendes Fenster fragt, ob du jetzt starten oder verschieben möchtest, und wartet am Bildschirmrand, bis du antwortest.',
   strictness_firm_hint:
     'Sobald eine Pause fällig ist, erscheint sofort eine Vollbild-Erinnerung — ohne vorherige Benachrichtigung.',
   strictness_strict_hint:
     'Sofort erscheint eine Vollbild-Erinnerung ohne vorherige Benachrichtigung. PausIO lässt sich während einer Pause nicht beenden, ein Notausstieg ist aber immer verfügbar.',
   setting_delivery_mode: 'Wie Pausen erscheinen',
   delivery_mode_notify: 'Nur benachrichtigen',
-  delivery_mode_ask: 'Erst fragen, dann Bildschirm abdecken',
+  delivery_mode_ask: 'Erst fragen, mit schwebendem Fenster',
   delivery_mode_cover: 'Bildschirm sofort abdecken',
   delivery_mode_hold: 'Bildschirm abdecken und halten',
   delivery_no_notice_warning:
@@ -648,6 +666,8 @@ const german: Record<LocalizationKey, string> = {
     'Erfasst nur den Nicht-stören-/Fokus-Status des Systems — niemals welche App oder welcher Fokus aktiv ist.',
   auto_detect_unsupported:
     'Auf dieser Plattform noch nicht verfügbar. Pausen werden hier nicht automatisch zurückgestellt.',
+  auto_detect_dnd_unsupported:
+    'Die automatische Erkennung von Nicht stören ist auf dieser Plattform noch nicht verfügbar — sie lässt sich ohne zusätzliche Berechtigungen nicht auslesen. Die Vollbild-Erkennung oben funktioniert weiterhin.',
   setting_display_target: 'Welche Bildschirme abdecken',
   display_all: 'Alle Bildschirme',
   display_active: 'Aktiver Bildschirm',
@@ -661,9 +681,13 @@ const german: Record<LocalizationKey, string> = {
   setting_show_clock: 'Aktuelle Uhrzeit während Pausen anzeigen',
   setting_show_clock_hint:
     'Eine kleine Uhr auf dem Pausenschirm, für alle, die wissen möchten, wie lange sie schon weg sind.',
-  setting_notification_sound: 'Systemton für Benachrichtigung abspielen',
-  setting_notification_sound_hint:
-    'PausIO zeichnet keinen Ton auf. Visuelle Hinweise bleiben verfügbar.',
+  setting_sound_timing: 'Ton abspielen',
+  setting_sound_timing_hint:
+    'Wenn die Pausenerinnerung erscheint, wenn eine Pause von selbst endet, beides oder nie. PausIO zeichnet keinen Ton auf.',
+  sound_timing_banner: 'Wenn die Erinnerung erscheint',
+  sound_timing_end: 'Wenn eine Pause endet',
+  sound_timing_both: 'Erinnerung und Pausenende',
+  sound_timing_silent: 'Stumm',
   setting_notification_sound_name: 'Ton',
   system_sound_default: 'Standard',
   system_sound_chime: 'Glockenspiel',
@@ -706,7 +730,7 @@ const german: Record<LocalizationKey, string> = {
   analytics_pending_count: '{count} offen',
   analytics_postponed_count: '{count} verschoben',
   analytics_early_count: '{count} vorzeitig beendet',
-  analytics_healthy_days: 'Gute Arbeitstage',
+  analytics_healthy_days: 'Tage im Rhythmus',
   analytics_current_run: 'Aktuelle Serie',
   analytics_day_unit_one: ' Tag',
   analytics_day_unit_other: ' Tage',
@@ -787,12 +811,6 @@ const german: Record<LocalizationKey, string> = {
   shortcut_record: 'Aufnehmen',
   shortcut_clear: 'Löschen',
   shortcut_recording: 'Tastenkombination drücken…',
-  setting_sound_theme: 'Ton bei Pausenende',
-  sound_theme_silence: 'Stumm',
-  sound_theme_chime: 'Glockenspiel',
-  sound_theme_tone: 'Ton',
-  sound_theme_click: 'Klick',
-  setting_sound_volume: 'Lautstärke',
   nudge_blink_announcement: 'Sanfte Erinnerung: Blinzele fünfmal langsam.',
   nudge_posture_announcement: 'Sanfte Erinnerung: Überprüfe deine Haltung.',
   nudge_hydration_announcement: 'Sanfte Erinnerung: Vielleicht ein Glas Wasser?',
@@ -821,7 +839,8 @@ const german: Record<LocalizationKey, string> = {
   onboarding_feature_privacy_body:
     'Läuft komplett offline auf deinem Gerät – ohne Tracking oder Datensammlung.',
   delivery_mode_notify_desc: 'Dezente Systembenachrichtigungen. Ideal bei häufigen Besprechungen.',
-  delivery_mode_ask_desc: 'Schwebendes Hinweisfenster mit Optionen zum Starten oder Verschieben.',
+  delivery_mode_ask_desc:
+    'Schwebendes Hinweisfenster mit Optionen zum Starten oder Verschieben. Bleibt sichtbar, bis du reagierst — startet die Pause nie von selbst.',
   delivery_mode_cover_desc: 'Beruhigende Vollbild-Abdeckung für eine echte Bildschirmpause.',
   delivery_mode_hold_desc: 'Strikte Vollbild-Abdeckung, die vorzeitiges Schließen verhindert.',
   onboarding_recommended_badge: 'Empfohlen',
@@ -834,9 +853,15 @@ const german: Record<LocalizationKey, string> = {
   onboarding_try_body:
     'Starte jetzt eine echte kurze Pause, damit du genau weißt, was dich später erwartet. Das zählt für nichts.',
   onboarding_try_done: 'Pause gestartet \u2014 schau kurz in die Ferne.',
+  onboarding_test_break_failed:
+    'Der Test-Break konnte nicht gestartet werden. Versuche es erneut oder fahre mit der Einrichtung fort.',
   history_days: '{value} Tage',
   history_unlimited: 'Bis ich ihn lösche',
+  setting_show_routine_score: 'Routine-Score anzeigen (experimentell)',
+  setting_show_routine_score_hint:
+    'Ein gewichteter 70/20/10-Wert aus Einhaltung, Timing und Konsistenz. Die Gewichtung ist nicht validiert, daher standardmäßig ausgeblendet.',
   diagnostics_heading: 'Desktop-Status',
+  diagnostics_app_version: 'Version {version}',
   diagnostics_permission: 'Benachrichtigungen: {state}',
   diagnostics_displays: 'Erkannte Bildschirme: {count}',
   diagnostics_test_reminder: 'Erinnerung testen',
@@ -886,6 +911,16 @@ const german: Record<LocalizationKey, string> = {
   watch_state_unreachable: 'Gekoppelt, nicht erreichbar',
   watch_state_unpaired: 'Keine Watch gekoppelt',
   watch_state_unavailable: 'Auf dem Desktop nicht verfügbar',
+  wearable_action_unavailable: 'Die Watch-Anbindung ist auf diesem Gerät nicht verfügbar.',
+  wearable_action_unpaired: 'Kopple deine Watch in der Watch-App und öffne dann PausIO darauf.',
+  wearable_action_app_not_installed:
+    'Installiere PausIO auf deiner Watch über den App Store der Watch-App.',
+  wearable_action_activating: 'Deine Watch wird eingerichtet — das kann einen Moment dauern.',
+  wearable_action_disconnected:
+    'Bring Watch und Telefon nah zusammen und versuche die Synchronisierung erneut.',
+  wearable_action_degraded:
+    'Erinnerungen auf deiner Watch könnten verzögert sein — prüfe die Verbindung und synchronisiere erneut.',
+  wearable_action_connected: 'Deine Watch erhält Erinnerungen.',
   wearables_heading: 'Wearables',
   wearables_hint:
     'Installiere die gekoppelte App, erlaube Erinnerungen und halte diesen Status fehlerfrei. Die Testvibration bestätigt nur die Zustellung.',
@@ -927,7 +962,6 @@ const german: Record<LocalizationKey, string> = {
     'Die Trink-Erinnerung muss alle 15 bis 120 Minuten erfolgen oder aus sein.',
   settings_error_global_shortcut:
     'Tastenkombinationen müssen 1 bis 40 Zeichen lang sein, oder leer zum Deaktivieren.',
-  settings_error_sound_volume: 'Die Lautstärke muss zwischen 0 und 100 liegen.',
   summary_heading: 'Was daraus folgt',
   summary_schedule: 'Aktiv {days}, {start} bis {end}.',
   summary_schedule_all_day: 'Aktiv {days}, rund um die Uhr.',
@@ -937,7 +971,7 @@ const german: Record<LocalizationKey, string> = {
   summary_delivery_notify:
     'Pausen werden nur per Benachrichtigung angekündigt \u2014 dein Bildschirm wird nie abgedeckt.',
   summary_delivery_ask:
-    'Eine Benachrichtigung fragt zuerst; ohne Antwort deckt die Pause {displays} ab.',
+    'Ein schwebendes Fenster fragt zuerst und wartet auf deine Antwort — die Pause beginnt, wenn du sie auswählst.',
   summary_delivery_cover: 'Pausen decken {displays} sofort ab.',
   summary_delivery_hold:
     'Pausen decken {displays} sofort ab, und PausIO kann bis zum Ende nicht beendet werden.',
@@ -959,15 +993,17 @@ const german: Record<LocalizationKey, string> = {
   section_sound: 'Ton',
   setting_longer_breaks: 'Längere Pausen',
   setting_longer_breaks_hint: 'Von Zeit zu Zeit fällt eine Pause länger aus, für mehr Erholung.',
-  sound_windows_note:
-    'Unter Windows spielt jedes Motiv den Standard-Alarmton des Systems, und diese Lautstärke hat keine Wirkung \u2014 beides folgt stattdessen der Windows-Alarmlautstärke.',
+  sound_windows_note: 'Unter Windows folgt der gewählte Ton der Windows-Alarmlautstärke.',
   fixed_break_outside_hours_warning:
     '{time} liegt außerhalb deiner aktiven Zeiten, diese Pause wird also nie stattfinden.',
+  fixed_break_unparseable_warning: 'Nicht erkannt: {entries} — entfernt.',
+  fixed_break_overflow_warning:
+    'Nur die ersten 12 festen Zeiten werden gespeichert; {count} entfernt.',
   presets_heading: 'Mit einer Vorlage starten',
   preset_classic: 'Klassisch 20-20-20',
   preset_gentle: 'Sanft',
   preset_focus_blocks: 'Fokusblöcke',
-  preset_eye_strain_recovery: 'Augenerholung',
+  preset_eye_strain_recovery: 'Häufige Augenpausen',
   preset_applied: '{name} angewendet.',
   action_pause_reminders: 'Erinnerungen pausieren',
   pause_reminders_hint: 'Verschiebt die nächste Pause lokal. Der Grund wird nirgends gespeichert.',
@@ -1018,4 +1054,31 @@ export function watchStateLabel(status: WatchStatus | null): string {
   if (!status.available) return t('watch_state_unavailable')
   if (!status.paired) return t('watch_state_unpaired')
   return status.reachable ? t('watch_state_ready') : t('watch_state_unreachable')
+}
+
+/**
+ * Turns the raw `connection_state` enum into a concrete next step, rather
+ * than leaving a person to interpret a technical status word on its own.
+ * Falls back to `null` (no guidance shown) for statuses this shell predates
+ * or doesn't recognize, rather than guessing.
+ */
+export function watchActionHint(status: WatchStatus | null): string | null {
+  switch (status?.connection_state) {
+    case 'unavailable':
+      return t('wearable_action_unavailable')
+    case 'unpaired':
+      return t('wearable_action_unpaired')
+    case 'app_not_installed':
+      return t('wearable_action_app_not_installed')
+    case 'activating':
+      return t('wearable_action_activating')
+    case 'disconnected':
+      return t('wearable_action_disconnected')
+    case 'degraded':
+      return t('wearable_action_degraded')
+    case 'connected':
+      return t('wearable_action_connected')
+    default:
+      return null
+  }
 }

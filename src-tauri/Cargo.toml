@@ -53,10 +53,6 @@ iana-time-zone.workspace = true
 tauri-plugin-eyecare = { path = "../plugins/tauri-plugin-eyecare" }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
-# The Tauri wrapper currently exposes actionable notification categories only on
-# mobile. Use its desktop backend directly so due-break notifications can carry
-# Start/Postpone actions on Windows, macOS, and compatible Linux desktops.
-notify-rust = "4.18"
 # Keep the desktop process unique when it is launched both by the user and by
 # the operating system at login. This must be registered before other plugins.
 tauri-plugin-autostart = "2"

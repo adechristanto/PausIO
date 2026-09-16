@@ -6,17 +6,21 @@
 
 ## 1. macOS: Developer ID signing + notarization
 
+**Status: CI-side scaffolding is done.** `.github/workflows/release.yml`'s `desktop` job now imports a certificate into a temporary keychain and passes `APPLE_SIGNING_IDENTITY`/`APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` to `pnpm tauri build` (Tauri's bundler reads these and calls `notarytool` itself — no separate manual step). `src-tauri/entitlements.plist` exists (empty — PausIO requests no special entitlements) and `bundle.macOS.hardenedRuntime`/`entitlements` are set in `tauri.conf.json`. **This produces an unsigned build exactly as before until the secrets below are added** — the import step and the four env vars are each conditioned on the corresponding secret being set, so a fork or a maintainer who hasn't done steps 1-2 yet sees no behavior change.
+
+What still requires the maintainer to act, outside of any code change:
+
 1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/) (paid, annual).
 2. Create a **Developer ID Application** certificate in Xcode or the Apple Developer portal; export it as a `.p12` with a password.
-3. Add to `src-tauri/tauri.conf.json` → `bundle.macOS`:
-   ```json
-   "signingIdentity": "Developer ID Application: Your Name (TEAMID)",
-   "hardenedRuntime": true,
-   "entitlements": "entitlements.plist"
-   ```
-4. Create `src-tauri/entitlements.plist` — PausIO needs no special entitlements beyond the hardened-runtime defaults (no camera/mic/network-server access is requested anywhere in the codebase, consistent with its privacy posture).
-5. Notarization: Tauri's bundler calls `notarytool` automatically when these environment variables are set at build time: `APPLE_ID`, `APPLE_PASSWORD` (an app-specific password, not the account password), `APPLE_TEAM_ID`. Store these as GitHub Actions secrets, never in the repo.
-6. The `.p12` certificate itself must be imported into the CI runner's keychain before building — see [tauri-action](https://github.com/tauri-apps/tauri-action)'s documented `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` secrets, which base64-encode the `.p12` into a repo secret and import it at CI time.
+3. Add these as GitHub repo secrets (Settings → Secrets and variables → Actions):
+   - `APPLE_CERTIFICATE` — the `.p12`, base64-encoded (`base64 -i cert.p12 | pbcopy`)
+   - `APPLE_CERTIFICATE_PASSWORD` — the password used when exporting the `.p12`
+   - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Your Name (TEAMID)`
+   - `APPLE_ID` — the Apple ID enrolled in the Developer Program
+   - `APPLE_APP_SPECIFIC_PASSWORD` — an [app-specific password](https://support.apple.com/en-us/102654) for that Apple ID, not the account password
+   - `APPLE_TEAM_ID` — the 10-character Team ID from the Developer portal
+
+`signingIdentity` is deliberately **not** set in `tauri.conf.json` — it's supplied only via the `APPLE_SIGNING_IDENTITY` CI env var, so `pnpm tauri build` keeps working locally for every contributor without a certificate installed.
 
 ## 2. Windows: code signing
 
@@ -65,6 +69,9 @@ Treat the resulting files as engineering artifacts, not public installers. Befor
 6. Confirm the tag version matches every package and application manifest.
 7. Regenerate checksums after replacing any artifact.
 8. Review the generated notes, mark the release non-prerelease only when appropriate, and publish manually.
+9. Work through `docs/LIFECYCLE_TEST_MATRIX.md` (lock/unlock, sleep/wake, restart, login-startup, display changes) on each platform and record the result before this draft is published.
+
+**Already verified, does not need re-checking:** the embedded WebDriver test server (`tauri_plugin_wdio_webdriver`) is compiled in only under the `e2e-webdriver` Cargo feature, which this workflow's `pnpm tauri build` never enables, and it additionally requires a runtime `--e2e` flag at launch (`src-tauri/src/lib.rs`) — release artifacts never carry it.
 
 When signing secrets exist, prefer the official Tauri release tooling or an equivalently reviewed, commit-pinned workflow. Never place signing material or updater private keys in the repository.
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  PausIO requests no special entitlements: no camera/mic/network-server access
+  is used anywhere in the codebase, consistent with its local-first, no-telemetry
+  posture. This file exists only so the macOS bundle can opt into the hardened
+  runtime (required for notarization) without any additional capability grants.
+-->
+<dict/>
+</plist>

@@ -15,7 +15,7 @@
   import { applyPreset, PRESET_IDS } from '../lib/presets'
   import { isMinuteInActiveWindow, isRoundTheClock, roundTheClockPatch } from '../lib/schedule'
   import { describeSettings } from '../lib/summary'
-  import { t, tCount, watchStateLabel } from '../lib/i18n'
+  import { t, tCount, watchActionHint, watchStateLabel } from '../lib/i18n'
   import { tooltip } from '../lib/tooltip'
   import type {
     Accent,
@@ -29,7 +29,7 @@
     Settings,
     SettingsProfiles,
     Snapshot,
-    SoundTheme,
+    SoundTiming,
     SystemSound,
     Theme,
     WatchStatus,
@@ -46,11 +46,14 @@
     watchStatus?: WatchStatus | null
     nudgeResult?: NudgeResult | null
     desktopHealth: DesktopHealth | null
+    appVersion?: string
     isApple: boolean
     isMobile: boolean
     settingsRegion: HTMLElement | undefined
     breakMessagesDraft: string
     fixedBreaksDraft: string
+    invalidFixedBreakEntries?: string[]
+    fixedBreakOverflowCount?: number
     resetLocalDataConfirmation: boolean
     diagnosticsOpen: boolean
     advancedOpen: boolean
@@ -84,11 +87,14 @@
     watchStatus = null,
     nudgeResult = null,
     desktopHealth,
+    appVersion = '',
     isApple,
     isMobile,
     settingsRegion = $bindable(),
     breakMessagesDraft = $bindable(),
     fixedBreaksDraft = $bindable(),
+    invalidFixedBreakEntries = [],
+    fixedBreakOverflowCount = 0,
     resetLocalDataConfirmation,
     diagnosticsOpen = $bindable(),
     advancedOpen = $bindable(false),
@@ -164,10 +170,10 @@
       | 'strictness_firm_hint'
       | 'strictness_strict_hint'
   )
-  // Only Firm and Strict produce no interim surface at Due (events.rs:494). Balanced
-  // still sends an actionable "start now / postpone" notification, so it is not
-  // warningless even with the pre-break notice off -- the caution belongs to the two
-  // modes that genuinely cover the screen with nothing preceding it.
+  // Only Firm and Strict produce no interim surface at Due (events.rs). Balanced
+  // still raises its persistent prompt, so it is not warningless even with the
+  // pre-break notice off -- the caution belongs to the two modes that genuinely
+  // cover the screen with nothing preceding it.
   const noAdvanceNotice = $derived(
     settings.pre_break_seconds === 0 && (deliveryMode === 'cover' || deliveryMode === 'hold')
   )
@@ -222,7 +228,7 @@
         </div>
       </div>
 
-      <div class="preset-row">
+      <div class="preset-row" id="setting-presets">
         <span class="preset-row-label">{t('presets_heading')}</span>
         <div>
           {#each PRESET_IDS as id (id)}
@@ -248,6 +254,7 @@
         <span>{t('setting_work_interval')}</span>
         <output>{t('unit_minutes', { value: intervalMinutes() })}</output>
         <input
+          id="setting-work-interval"
           aria-label={t('setting_work_interval')}
           type="range"
           min="300"
@@ -290,6 +297,7 @@
           <label class="select-row">
             <span>{t('setting_display_target')}</span>
             <select
+              id="setting-display-target"
               value={coveredDisplays}
               onchange={(event) =>
                 editSettings({
@@ -311,6 +319,7 @@
           <label class="select-row">
             <span>{t('setting_postpone_limit')}</span>
             <select
+              id="setting-postpone-limit"
               value={settings.postpone_limit ?? ''}
               onchange={(e) =>
                 editSettings({
@@ -328,32 +337,47 @@
         {/if}
       </div>
 
-      <div class="section-subheading">
-        <h3>{t('section_sound')}</h3>
-        {#if desktopHealth?.platform === 'windows'}
-          <p class="setting-note">{t('sound_windows_note')}</p>
-        {/if}
-      </div>
-      <div class="setting-list">
-        {#if !isMobile}
-          <label class="toggle-row">
+      {#if !isMobile}
+        <div class="section-subheading">
+          <h3>{t('section_sound')}</h3>
+          {#if desktopHealth?.platform === 'windows'}
+            <p class="setting-note">{t('sound_windows_note')}</p>
+          {/if}
+        </div>
+        <div class="setting-list">
+          <label class="select-row">
             <span
-              ><strong>{t('setting_notification_sound')}</strong><small
-                >{t('setting_notification_sound_hint')}</small
+              ><strong>{t('setting_sound_timing')}</strong><small
+                >{t('setting_sound_timing_hint')}</small
               ></span
             >
-            <input
-              type="checkbox"
-              role="switch"
-              checked={settings.notification_sound ?? false}
+            <select
+              id="setting-sound-timing"
+              value={settings.sound_timing ?? 'end'}
               onchange={(event) =>
-                editSettings({ ...settings!, notification_sound: event.currentTarget.checked })}
-            />
+                editSettings({
+                  ...settings!,
+                  sound_timing: event.currentTarget.value as SoundTiming,
+                })}
+            >
+              {#each ['banner', 'end', 'both', 'silent'] as timing}
+                <option value={timing}
+                  >{t(
+                    `sound_timing_${timing}` as
+                      | 'sound_timing_banner'
+                      | 'sound_timing_end'
+                      | 'sound_timing_both'
+                      | 'sound_timing_silent'
+                  )}</option
+                >
+              {/each}
+            </select>
           </label>
-          {#if settings.notification_sound ?? false}
+          {#if (settings.sound_timing ?? 'end') !== 'silent'}
             <label class="select-row">
               <span>{t('setting_notification_sound_name')}</span>
               <select
+                id="setting-notification-sound-name"
                 value={settings.notification_sound_name ?? 'default'}
                 onchange={(event) =>
                   editSettings({
@@ -382,50 +406,11 @@
               >
             </label>
           {/if}
-        {/if}
-        <label class="select-row">
-          <span>{t('setting_sound_theme')}</span>
-          <select
-            value={settings.sound_theme ?? 'silence'}
-            onchange={(event) =>
-              editSettings({
-                ...settings!,
-                sound_theme: event.currentTarget.value as SoundTheme,
-              })}
-          >
-            {#each ['silence', 'chime', 'tone', 'click'] as theme}
-              <option value={theme}
-                >{t(
-                  `sound_theme_${theme}` as
-                    | 'sound_theme_silence'
-                    | 'sound_theme_chime'
-                    | 'sound_theme_tone'
-                    | 'sound_theme_click'
-                )}</option
-              >
-            {/each}
-          </select>
-        </label>
-        {#if (settings.sound_theme ?? 'silence') !== 'silence'}
-          <label class="range-control">
-            <span>{t('setting_sound_volume')}</span>
-            <output>{t('unit_percent', { value: settings.sound_volume ?? 70 })}</output>
-            <input
-              aria-label={t('setting_sound_volume')}
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={settings.sound_volume ?? 70}
-              oninput={(e) =>
-                editSettings({ ...settings!, sound_volume: Number(e.currentTarget.value) })}
-            />
-          </label>
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       <Advanced bind:open={advancedOpen}>
-        <div class="stepper-row">
+        <div class="stepper-row" id="setting-eye-break">
           <div>
             <span>{t('setting_eye_break')}</span><small>{t('setting_eye_break_hint')}</small>
           </div>
@@ -447,7 +432,7 @@
             >
           </div>
         </div>
-        <div class="stepper-row long-break-row">
+        <div class="stepper-row long-break-row" id="setting-longer-breaks">
           <div>
             <span>{t('setting_longer_breaks')}</span><small>{t('setting_longer_breaks_hint')}</small
             >
@@ -499,6 +484,7 @@
         <label class="select-row">
           <span>{t('setting_warning')}</span>
           <select
+            id="setting-warning"
             value={settings.pre_break_seconds}
             onchange={(e) =>
               editSettings({
@@ -516,6 +502,7 @@
         <label class="select-row">
           <span>{t('setting_blink_nudge')}</span>
           <select
+            id="setting-blink-nudge"
             value={settings.blink_nudge_minutes ?? ''}
             onchange={(event) =>
               editSettings({
@@ -533,6 +520,7 @@
         <label class="select-row">
           <span>{t('setting_posture_nudge')}</span>
           <select
+            id="setting-posture-nudge"
             value={settings.posture_nudge_minutes ?? ''}
             onchange={(event) =>
               editSettings({
@@ -550,6 +538,7 @@
         <label class="select-row">
           <span>{t('setting_hydration_nudge')}</span>
           <select
+            id="setting-hydration-nudge"
             value={settings.hydration_nudge_minutes ?? ''}
             onchange={(event) =>
               editSettings({
@@ -581,7 +570,7 @@
           <p>{t('section_schedule_hint')}</p>
         </div>
       </div>
-      <fieldset class="day-picker">
+      <fieldset class="day-picker" id="setting-active-days">
         <legend>{t('setting_active_days')}</legend>
         <div>
           {#each dayLabels() as label, index}
@@ -601,6 +590,7 @@
       <label class="toggle-row">
         <span><strong>{t('setting_round_the_clock')}</strong></span>
         <input
+          id="setting-round-the-clock"
           type="checkbox"
           role="switch"
           checked={roundTheClock}
@@ -612,6 +602,7 @@
           <label>
             <span>{t('setting_start_time')}</span>
             <input
+              id="setting-start-time"
               aria-label={t('setting_start_time')}
               type="time"
               lang={appLocale()}
@@ -626,6 +617,7 @@
           <label>
             <span>{t('setting_end_time')}</span>
             <input
+              id="setting-end-time"
               aria-label={t('setting_end_time')}
               type="time"
               lang={appLocale()}
@@ -645,6 +637,7 @@
           <label class="select-row">
             <span>{t('setting_context')}</span>
             <select
+              id="setting-context"
               aria-label={t('setting_context')}
               value={state?.context ?? ''}
               onchange={(event) =>
@@ -692,7 +685,7 @@
               </p>{/if}
           {/if}
         {/if}
-        {#if desktopHealth?.auto_context_supported}
+        {#if desktopHealth?.auto_context_fullscreen_supported}
           <label class="toggle-row">
             <span
               ><strong>{t('setting_auto_detect_fullscreen')}</strong><small
@@ -700,6 +693,7 @@
               ></span
             >
             <input
+              id="setting-auto-detect-fullscreen"
               type="checkbox"
               role="switch"
               checked={settings.auto_detect_fullscreen ?? false}
@@ -710,6 +704,8 @@
                 })}
             />
           </label>
+        {/if}
+        {#if desktopHealth?.auto_context_dnd_supported}
           <label class="toggle-row">
             <span
               ><strong>{t('setting_auto_detect_dnd')}</strong><small
@@ -717,6 +713,7 @@
               ></span
             >
             <input
+              id="setting-auto-detect-dnd"
               type="checkbox"
               role="switch"
               checked={settings.auto_detect_do_not_disturb ?? false}
@@ -727,16 +724,23 @@
                 })}
             />
           </label>
-        {:else if desktopHealth}
-          <!-- auto_context_supported is cfg!(target_os = "windows") (commands.rs:461), so
-               these toggles simply vanished on macOS and Linux. Saying so is better than
-               leaving a person to wonder whether the feature exists and they cannot find it. -->
+        {/if}
+        {#if desktopHealth && !desktopHealth.auto_context_fullscreen_supported && !desktopHealth.auto_context_dnd_supported}
+          <!-- Neither signal is available on this platform (Linux today) -- saying so
+               is better than leaving a person to wonder whether the feature exists and
+               they cannot find it. -->
           <p class="setting-note">{t('auto_detect_unsupported')}</p>
+        {:else if desktopHealth?.auto_context_fullscreen_supported && !desktopHealth.auto_context_dnd_supported}
+          <!-- macOS: fullscreen detection is public-API-feasible and implemented
+               (platform/macos.rs), but Do Not Disturb has no public, permission-free
+               API on modern macOS, so only that one toggle is honestly unavailable. -->
+          <p class="setting-note">{t('auto_detect_dnd_unsupported')}</p>
         {/if}
         <label class="message-row">
           <span>{t('setting_fixed_breaks')}</span>
           <small>{t('setting_fixed_breaks_hint')}</small>
           <textarea
+            id="setting-fixed-breaks"
             aria-label={t('setting_fixed_breaks')}
             placeholder={'12:30, 15:00'}
             bind:value={fixedBreaksDraft}
@@ -746,10 +750,23 @@
               {t('fixed_break_outside_hours_warning', { time })}
             </small>
           {/each}
+          {#if invalidFixedBreakEntries.length}
+            <small class="setting-warning" role="alert">
+              {t('fixed_break_unparseable_warning', {
+                entries: invalidFixedBreakEntries.join(', '),
+              })}
+            </small>
+          {/if}
+          {#if fixedBreakOverflowCount > 0}
+            <small class="setting-warning" role="alert">
+              {t('fixed_break_overflow_warning', { count: fixedBreakOverflowCount })}
+            </small>
+          {/if}
         </label>
         <label class="select-row">
           <span>{t('setting_daily_focus_limit')}</span>
           <select
+            id="setting-daily-focus-limit"
             value={settings.daily_focus_limit_minutes ?? ''}
             onchange={(event) =>
               editSettings({
@@ -783,7 +800,7 @@
           <p>{t('section_profiles_hint')}</p>
         </div>
       </div>
-      <div class="profile-grid">
+      <div class="profile-grid" id="setting-profiles">
         {#each ['work', 'home'] as profile}
           {@const name = profile as 'work' | 'home'}
           <div>
@@ -826,6 +843,7 @@
         <label class="select-row">
           <span>{t('setting_language')}</span>
           <select
+            id="setting-language"
             value={settings.locale ?? 'en'}
             onchange={(event) =>
               editSettings({ ...settings!, locale: event.currentTarget.value as Locale })}
@@ -837,6 +855,7 @@
         <label class="select-row">
           <span>{t('setting_theme')}</span>
           <select
+            id="setting-theme"
             value={settings.theme ?? 'system'}
             onchange={(event) =>
               editSettings({ ...settings!, theme: event.currentTarget.value as Theme })}
@@ -848,7 +867,12 @@
         </label>
         <div class="select-row">
           <span>{t('setting_accent')}</span>
-          <div class="accent-picker" role="radiogroup" aria-label={t('setting_accent')}>
+          <div
+            id="setting-accent"
+            class="accent-picker"
+            role="radiogroup"
+            aria-label={t('setting_accent')}
+          >
             {#each ['horizon', 'sage', 'amber', 'lilac'] as accent}
               {@const label = t(
                 `accent_${accent}` as
@@ -873,14 +897,15 @@
         <label class="select-row">
           <span>{t('setting_routine')}</span>
           <select
-            value={settings.break_routine ?? 'guided'}
+            id="setting-routine"
+            value={settings.break_routine ?? 'far_gaze'}
             onchange={(event) =>
               editSettings({
                 ...settings!,
                 break_routine: event.currentTarget.value as BreakRoutine,
               })}
           >
-            {#each ['guided', 'quiet', 'far_gaze', 'blink', 'posture'] as routine}
+            {#each ['far_gaze', 'quiet', 'blink', 'posture', 'guided'] as routine}
               <option value={routine}
                 >{t(
                   `routine_${routine}` as
@@ -898,6 +923,7 @@
           <span>{t('setting_messages')}</span>
           <small>{t('setting_messages_hint')}</small>
           <textarea
+            id="setting-messages"
             aria-label={t('setting_messages')}
             maxlength="1451"
             bind:value={breakMessagesDraft}
@@ -909,6 +935,7 @@
             ></span
           >
           <input
+            id="setting-show-clock"
             type="checkbox"
             role="switch"
             checked={settings.show_clock_in_break ?? false}
@@ -940,16 +967,19 @@
       </div>
       <div class="setting-list">
         <ShortcutField
+          id="setting-end-break-shortcut"
           label={t('setting_end_break_shortcut')}
           value={settings.end_break_shortcut ?? null}
           onChange={(next) => editSettings({ ...settings!, end_break_shortcut: next })}
         />
         <ShortcutField
+          id="setting-pause-toggle-shortcut"
           label={t('setting_pause_toggle_shortcut')}
           value={settings.pause_toggle_shortcut ?? null}
           onChange={(next) => editSettings({ ...settings!, pause_toggle_shortcut: next })}
         />
         <ShortcutField
+          id="setting-take-break-shortcut"
           label={t('setting_take_break_shortcut')}
           value={settings.take_break_shortcut ?? null}
           onChange={(next) => editSettings({ ...settings!, take_break_shortcut: next })}
@@ -963,6 +993,7 @@
             ></span
           >
           <input
+            id="setting-start-at-login"
             type="checkbox"
             role="switch"
             aria-label={t('setting_start_at_login')}
@@ -991,6 +1022,7 @@
       <label class="toggle-row">
         <span><strong>{t('setting_history_enabled')}</strong></span>
         <input
+          id="setting-history-enabled"
           type="checkbox"
           role="switch"
           checked={settings.history_enabled ?? false}
@@ -1002,6 +1034,7 @@
         <label class="select-row">
           <span>{t('setting_history_retention')}</span>
           <select
+            id="setting-history-retention"
             value={settings.history_retention_days ?? ''}
             onchange={(event) =>
               editSettings({
@@ -1016,18 +1049,34 @@
             <option value="">{t('history_unlimited')}</option>
           </select>
         </label>
+        <label class="toggle-row">
+          <span
+            ><strong>{t('setting_show_routine_score')}</strong><small
+              >{t('setting_show_routine_score_hint')}</small
+            ></span
+          >
+          <input
+            id="setting-show-routine-score"
+            type="checkbox"
+            role="switch"
+            checked={settings.show_routine_score ?? false}
+            onchange={(event) =>
+              editSettings({ ...settings!, show_routine_score: event.currentTarget.checked })}
+          />
+        </label>
       {/if}
 
       <Advanced bind:open={advancedOpen}>
         <div class="advanced-block">
           <p>{t('privacy_reset_hint')}</p>
-          <button class="button button-danger" onclick={resetLocalData}
+          <button id="setting-privacy-reset" class="button button-danger" onclick={resetLocalData}
             >{resetLocalDataConfirmation ? t('privacy_reset_confirm') : t('privacy_reset')}</button
           >
         </div>
         {#if !isMobile}
           <section class="diagnostics">
             <button
+              id="setting-diagnostics"
               class="diagnostics-trigger"
               aria-expanded={diagnosticsOpen}
               onclick={() => (diagnosticsOpen = !diagnosticsOpen)}
@@ -1044,6 +1093,9 @@
             </button>
             {#if diagnosticsOpen}
               <div class="diagnostics-content">
+                {#if appVersion}
+                  <p>{t('diagnostics_app_version', { version: appVersion })}</p>
+                {/if}
                 <p>
                   {t('diagnostics_permission', {
                     state: desktopHealth
@@ -1104,6 +1156,9 @@
           <span class="wearable-connection-dot" aria-hidden="true"></span>
           <strong>{t('watch_status', { state: watchStateLabel(watchStatus) })}</strong>
         </div>
+        {#if watchActionHint(watchStatus ?? null)}
+          <p class="wearable-action-hint">{watchActionHint(watchStatus ?? null)}</p>
+        {/if}
         <p>
           {t('wearables_permission', {
             state: permissionLabel(watchStatus?.notification_permission ?? 'unknown'),

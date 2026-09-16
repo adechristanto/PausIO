@@ -28,6 +28,17 @@ describe('SETTINGS_INDEX', () => {
       new Set(['breaks', 'schedule', 'appearance', 'shortcuts', 'privacy'])
     )
   })
+
+  it('gives every entry a non-empty, unique controlId', () => {
+    // A search result that can't scroll to and focus its control is only half a
+    // fix for "which of five panes is this in" -- the id is what the click flow
+    // in App.svelte's selectSearchResult uses to find the actual DOM node.
+    for (const entry of SETTINGS_INDEX) {
+      expect(entry.controlId.length).toBeGreaterThan(0)
+    }
+    const ids = SETTINGS_INDEX.map((entry) => entry.controlId)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
 })
 
 describe('searchSettings', () => {

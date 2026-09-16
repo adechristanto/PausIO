@@ -33,9 +33,17 @@ pub(crate) struct DesktopHealth {
     pub history_enabled: bool,
     pub history_retention_days: Option<u16>,
     pub display_target: pausio_core::DisplayTarget,
-    /// Whether this platform can supply automatic context signals at all.
-    /// Currently Windows only; macOS and Linux report `false` honestly.
-    pub auto_context_supported: bool,
+    /// Whether this platform can automatically detect fullscreen apps.
+    /// Windows and macOS (`CGWindowListCopyWindowInfo`, permission-free);
+    /// Linux reports `false` honestly.
+    pub auto_context_fullscreen_supported: bool,
+    /// Whether this platform can automatically detect Do Not Disturb / Focus.
+    /// Windows only (`SHQueryUserNotificationState`) -- macOS has no public,
+    /// permission-free API for this, and Linux reports `false` honestly. Kept
+    /// separate from `auto_context_fullscreen_supported` so a platform that
+    /// supports one signal but not the other (macOS) is not forced to claim
+    /// or hide both together.
+    pub auto_context_dnd_supported: bool,
 }
 
 /// UI commands and tray callbacks can arrive on macOS's main event loop. Window creation
@@ -473,7 +481,11 @@ pub(crate) fn get_desktop_health(
             history_enabled: settings.history_enabled,
             history_retention_days: settings.history_retention_days,
             display_target: settings.display_target,
-            auto_context_supported: cfg!(target_os = "windows"),
+            auto_context_fullscreen_supported: cfg!(any(
+                target_os = "windows",
+                target_os = "macos"
+            )),
+            auto_context_dnd_supported: cfg!(target_os = "windows"),
         })
     }
     #[cfg(not(desktop))]
@@ -489,9 +501,21 @@ pub(crate) fn get_desktop_health(
             history_enabled: settings.history_enabled,
             history_retention_days: settings.history_retention_days,
             display_target: settings.display_target,
-            auto_context_supported: false,
+            auto_context_fullscreen_supported: false,
+            auto_context_dnd_supported: false,
         })
     }
+}
+
+/// Whether this build has any watch-companion capability at all -- desktop
+/// builds don't register `sync_watch_settings`/`send_test_nudge`/`get_watch_status`
+/// (see the `#[cfg(mobile)]` gating in lib.rs), so the frontend needs an
+/// unconditional command to feature-detect rather than probing one that may
+/// not exist. Not a substitute for `get_watch_status`'s richer state once a
+/// companion is actually available.
+#[tauri::command]
+pub(crate) fn watch_sync_available() -> bool {
+    cfg!(mobile)
 }
 
 #[tauri::command]
@@ -510,7 +534,7 @@ pub(crate) fn test_reminder(app: AppHandle, engine: State<'_, EngineState>) -> A
             let guard = lock_engine(&engine.0);
             (
                 guard.settings().locale,
-                crate::events::resolved_notification_sound(guard.settings()),
+                crate::events::reminder_cue(guard.settings()),
             )
         };
         crate::events::show_local_notification(

@@ -61,7 +61,11 @@
   // "step X of N" eyebrow is skipped for them entirely rather than always
   // claiming "step 1 of 4" regardless of which routine is actually running.
   const exercise = $derived.by(() => {
-    const routine = settings?.break_routine ?? 'guided'
+    // 'far_gaze' -- a single, stable "look away" instruction -- is the default
+    // for a reason: a 20s short break cycling through 4 instructions every 5s
+    // (the 'guided' routine below) is busier than a restful break should be.
+    // Guided stays fully available as an explicit opt-in choice in Settings.
+    const routine = settings?.break_routine ?? 'far_gaze'
     if (routine === 'quiet') return { step: 1, totalSteps: 1, message: t('break_guidance') }
     if (routine === 'far_gaze') return { step: 1, totalSteps: 1, message: t('exercise_far') }
     if (routine === 'blink') return { step: 1, totalSteps: 1, message: t('exercise_blink') }
