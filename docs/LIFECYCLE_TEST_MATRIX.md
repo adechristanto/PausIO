@@ -1,0 +1,18 @@
+# Native lifecycle test matrix
+
+A QA checklist, not code. Fill in the **Result** column by hand on real hardware before publishing a signed release draft (see `docs/RELEASE_PIPELINE.md` step 9). The **Known** column below was seeded by reading the current implementation, not by running these scenarios — treat it as a starting hypothesis to confirm, not a substitute for actually doing so.
+
+| Scenario | macOS | Windows | Linux |
+|---|---|---|---|
+| Lock while a break is due/running | **Known:** `NSWorkspaceSessionDidResignActiveNotification` → `handle_session_event(Locked)` (`src-tauri/src/session_monitor.rs`) | **Known:** `WM_WTSSESSION_CHANGE`/`WTS_SESSION_LOCK` → same handler | **Known:** polled via `loginctl` session `LockedHint` (`platform/linux.rs`), not an instantaneous OS callback |
+| Unlock resumes correctly | **Known:** `NSWorkspaceSessionDidBecomeActiveNotification` | **Known:** `WTS_SESSION_UNLOCK` | **Known:** polled, same mechanism as lock |
+| Sleep (lid close / manual sleep) | **Gap:** no `NSWorkspaceWillSleepNotification`/`DidWakeNotification` observer found — sleep is not distinguished from lock unless the OS also locks on sleep (commonly true, but not guaranteed by every user's power settings) | **Gap:** no `WM_POWERBROADCAST`/`PBT_APMSUSPEND` handler found — same caveat as macOS | **Gap:** same; relies entirely on the lock poll and idle-time detection as a proxy |
+| Wake from sleep | Same gap as above | Same gap as above | Same gap as above |
+| Restart / relaunch after crash | Not found in this pass — verify session/timer state recovers from the persisted checkpoint (`store.rs`, `SessionCheckpoint`) rather than starting a break avalanche | Same | Same |
+| Login-item / start-at-login launches correctly | Autostart plugin wired (`get_autostart_status`/`set_autostart_enabled`, `commands.rs`) — verify the *initial* state on a machine with it enabled | Same | Same (check whether autostart is even offered — `autostart_supported` may be `false` on some Linux desktop environments) |
+| Display added/removed while a covering break is up | `display_target`-aware break windows exist per display; verify a break overlay on a since-removed display doesn't strand the "I'm back" flow | Same | Same |
+| Multiple monitors, break covers "All" vs "Active" vs "Primary" | Covered in code (`DisplayTarget`) — needs an actual multi-monitor rig to verify the overlay lands on the intended screen(s) | Same | Same |
+
+## How to use this
+
+For each cell, either confirm the "Known" behavior really holds on real hardware, or replace it with what was actually observed. Cells with no code-level answer ("Not found in this pass") need investigation before they can even be tested meaningfully. Do not publish a signed release draft with unconfirmed rows in this table for the platform being released.

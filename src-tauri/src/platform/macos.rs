@@ -13,15 +13,185 @@ pub(crate) fn platform_idle_seconds() -> Option<u32> {
     (seconds.is_finite() && seconds >= 0.0).then(|| seconds.min(u32::MAX as f64) as u32)
 }
 
-/// Reliable fullscreen/Focus detection on macOS needs either the
-/// Accessibility permission or careful CoreGraphics window-list traversal
-/// (`CGWindowListCopyWindowInfo`), and the unofficial `Assertions.json` route
-/// for Focus state is known to false-positive. Both are deliberately
-/// deferred rather than shipped unverified; automatic context detection is
-/// unsupported on macOS for now, and this is reported honestly in the
-/// desktop health report rather than silently doing nothing.
+/// Fullscreen detection via `CGWindowListCopyWindowInfo` — a public,
+/// permission-free CoreGraphics API (same trust tier as the idle-time call
+/// above): the frontmost normal-layer (0) window's bounds are compared
+/// against every active display's bounds, and an exact match is treated as
+/// fullscreen.
+///
+/// Focus/Do Not Disturb detection is deliberately *not* implemented: there is
+/// no public, permission-free API for it on modern macOS, and the unofficial
+/// `Assertions.json` route is known to false-positive. Reporting `None` for
+/// that case honestly, rather than silently doing nothing, is why
+/// `auto_context_dnd_supported` in the desktop health report is `false` on
+/// macOS while `auto_context_fullscreen_supported` is `true`.
 pub(crate) fn platform_context_signal() -> Option<pausio_protocol::ContextReason> {
-    None
+    unsafe {
+        let windows = cg_window_list::CGWindowListCopyWindowInfo(
+            cg_window_list::K_CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY
+                | cg_window_list::K_CG_WINDOW_LIST_EXCLUDE_DESKTOP_ELEMENTS,
+            cg_window_list::K_CG_NULL_WINDOW_ID,
+        );
+        if windows.is_null() {
+            return None;
+        }
+        let result = cg_window_list::frontmost_window_is_fullscreen(windows);
+        cg_window_list::CFRelease(windows);
+        result.then_some(pausio_protocol::ContextReason::Fullscreen)
+    }
+}
+
+/// Minimal, hand-written FFI surface for the one CoreGraphics/CoreFoundation
+/// call chain `platform_context_signal` needs, rather than a new dependency
+/// for a handful of stable C ABI calls.
+#[allow(non_upper_case_globals, non_snake_case)]
+mod cg_window_list {
+    use std::ffi::c_void;
+
+    type CFIndex = isize;
+    type CFStringRef = *const c_void;
+    type CFArrayRef = *const c_void;
+    type CFDictionaryRef = *const c_void;
+    type CFTypeRef = *const c_void;
+    type CGWindowID = u32;
+    type CGDirectDisplayID = u32;
+    type CGWindowListOption = u32;
+    type CGError = i32;
+    type Boolean = u8;
+
+    #[repr(C)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+
+    pub(super) const K_CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY: CGWindowListOption = 1 << 0;
+    pub(super) const K_CG_WINDOW_LIST_EXCLUDE_DESKTOP_ELEMENTS: CGWindowListOption = 1 << 4;
+    pub(super) const K_CG_NULL_WINDOW_ID: CGWindowID = 0;
+    const K_CF_NUMBER_SINT64_TYPE: i32 = 4;
+    // The frontmost, ordinary application window sits at CGWindowLevel 0;
+    // menu bar, dock, and overlay windows use non-zero layers.
+    const NORMAL_WINDOW_LAYER: i64 = 0;
+    const MAX_DISPLAYS: u32 = 16;
+    // CGWindowListCopyWindowInfo bounds are integer-rounded, so an exact
+    // floating-point match is not reliable across every display config.
+    const BOUNDS_EPSILON: f64 = 1.0;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        pub(super) fn CGWindowListCopyWindowInfo(
+            option: CGWindowListOption,
+            relative_to_window: CGWindowID,
+        ) -> CFArrayRef;
+        fn CGRectMakeWithDictionaryRepresentation(
+            dict: CFDictionaryRef,
+            rect: *mut CGRect,
+        ) -> Boolean;
+        fn CGDisplayBounds(display: CGDirectDisplayID) -> CGRect;
+        fn CGGetActiveDisplayList(
+            max_displays: u32,
+            active_displays: *mut CGDirectDisplayID,
+            display_count: *mut u32,
+        ) -> CGError;
+        static kCGWindowLayer: CFStringRef;
+        static kCGWindowBounds: CFStringRef;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
+        fn CFArrayGetValueAtIndex(array: CFArrayRef, idx: CFIndex) -> *const c_void;
+        fn CFDictionaryGetValue(dict: CFDictionaryRef, key: *const c_void) -> *const c_void;
+        fn CFNumberGetValue(
+            number: *const c_void,
+            the_type: i32,
+            value_ptr: *mut c_void,
+        ) -> Boolean;
+        pub(super) fn CFRelease(cf: CFTypeRef);
+    }
+
+    fn window_layer(dict: CFDictionaryRef) -> Option<i64> {
+        unsafe {
+            let value = CFDictionaryGetValue(dict, kCGWindowLayer);
+            if value.is_null() {
+                return None;
+            }
+            let mut out: i64 = 0;
+            (CFNumberGetValue(
+                value,
+                K_CF_NUMBER_SINT64_TYPE,
+                &mut out as *mut i64 as *mut c_void,
+            ) != 0)
+                .then_some(out)
+        }
+    }
+
+    fn window_bounds(dict: CFDictionaryRef) -> Option<CGRect> {
+        unsafe {
+            let value = CFDictionaryGetValue(dict, kCGWindowBounds);
+            if value.is_null() {
+                return None;
+            }
+            let mut rect = CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize {
+                    width: 0.0,
+                    height: 0.0,
+                },
+            };
+            (CGRectMakeWithDictionaryRepresentation(value, &mut rect) != 0).then_some(rect)
+        }
+    }
+
+    fn active_display_bounds() -> Vec<CGRect> {
+        unsafe {
+            let mut ids = [0u32; MAX_DISPLAYS as usize];
+            let mut count: u32 = 0;
+            if CGGetActiveDisplayList(MAX_DISPLAYS, ids.as_mut_ptr(), &mut count) != 0 {
+                return Vec::new();
+            }
+            ids[..count as usize]
+                .iter()
+                .map(|&id| CGDisplayBounds(id))
+                .collect()
+        }
+    }
+
+    fn rects_equal(a: &CGRect, b: &CGRect) -> bool {
+        (a.origin.x - b.origin.x).abs() < BOUNDS_EPSILON
+            && (a.origin.y - b.origin.y).abs() < BOUNDS_EPSILON
+            && (a.size.width - b.size.width).abs() < BOUNDS_EPSILON
+            && (a.size.height - b.size.height).abs() < BOUNDS_EPSILON
+    }
+
+    /// `windows` is ordered frontmost-first, so the first normal-layer entry
+    /// is the frontmost application window; its bounds are compared against
+    /// every active display.
+    pub(super) fn frontmost_window_is_fullscreen(windows: CFArrayRef) -> bool {
+        unsafe {
+            let count = CFArrayGetCount(windows);
+            let displays = active_display_bounds();
+            for i in 0..count {
+                let dict = CFArrayGetValueAtIndex(windows, i);
+                if dict.is_null() || window_layer(dict) != Some(NORMAL_WINDOW_LAYER) {
+                    continue;
+                }
+                return window_bounds(dict)
+                    .is_some_and(|bounds| displays.iter().any(|d| rects_equal(d, &bounds)));
+            }
+            false
+        }
+    }
 }
 
 /// Raises a break overlay above the Dock and menu bar. Tauri's `always_on_top` maps to

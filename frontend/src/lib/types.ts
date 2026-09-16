@@ -39,6 +39,7 @@ export interface Settings {
   break_routine?: BreakRoutine
   history_enabled?: boolean
   history_retention_days?: number | null
+  show_routine_score?: boolean
   sound_timing?: SoundTiming
   notification_sound_name?: SystemSound
   fixed_break_minutes?: number[]
@@ -178,5 +179,6 @@ export interface DesktopHealth {
   history_enabled: boolean
   history_retention_days: number | null
   display_target: DisplayTarget
-  auto_context_supported: boolean
+  auto_context_fullscreen_supported: boolean
+  auto_context_dnd_supported: boolean
 }

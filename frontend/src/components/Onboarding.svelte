@@ -28,15 +28,26 @@
     settings: Settings
     editSettings: (next: Settings) => void
     toggleDay: (index: number) => void
+    /** Desktop-only choices (which monitor a covering break targets) don't apply on a phone. */
+    isPhoneHost?: boolean
     takeBreakNow: () => Promise<void>
     onSkip: () => void
     onFinish: () => void
   }
-  let { settings, editSettings, toggleDay, takeBreakNow, onSkip, onFinish }: Props = $props()
+  let {
+    settings,
+    editSettings,
+    toggleDay,
+    isPhoneHost = false,
+    takeBreakNow,
+    onSkip,
+    onFinish,
+  }: Props = $props()
 
   const TOTAL_STEPS = 4
   let step = $state<1 | 2 | 3 | 4>(1)
   let breakStarted = $state(false)
+  let breakFailed = $state(false)
 
   const appLocale = () => (settings.locale === 'de' ? 'de-DE' : 'en-US')
   const dayLabels = () => {
@@ -63,8 +74,13 @@
     editSettings({ ...settings, ...deliveryPatch(settings, mode) })
 
   const tryItNow = async () => {
-    await takeBreakNow()
-    breakStarted = true
+    breakFailed = false
+    try {
+      await takeBreakNow()
+      breakStarted = true
+    } catch {
+      breakFailed = true
+    }
   }
 
   const applyWorkdayPreset = () => {
@@ -382,7 +398,7 @@
         {/each}
       </div>
 
-      {#if coversScreen}
+      {#if coversScreen && !isPhoneHost}
         <label class="select-row">
           <span>{t('setting_display_target')}</span>
           <select
@@ -426,6 +442,11 @@
             <span>{t('onboarding_try_done')}</span>
           </div>
         {:else}
+          {#if breakFailed}
+            <p class="notice notice-error" role="alert">
+              <span aria-hidden="true">!</span>{t('onboarding_test_break_failed')}
+            </p>
+          {/if}
           <button type="button" class="button button-primary test-break-btn" onclick={tryItNow}>
             <svg
               viewBox="0 0 24 24"

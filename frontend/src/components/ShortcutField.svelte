@@ -5,12 +5,13 @@
   import { tooltip } from '../lib/tooltip'
 
   interface Props {
+    id?: string
     label: string
     /** Tauri accelerator syntax (e.g. "CmdOrCtrl+Shift+X"), or null when disabled. */
     value: string | null
     onChange: (value: string | null) => void
   }
-  let { label, value, onChange }: Props = $props()
+  let { id, label, value, onChange }: Props = $props()
 
   let recording = $state(false)
   let fieldEl: HTMLButtonElement | undefined = $state()
@@ -93,6 +94,7 @@
   <span>{label}</span>
   <div class="shortcut-control">
     <button
+      {id}
       type="button"
       class="shortcut-field"
       class:recording

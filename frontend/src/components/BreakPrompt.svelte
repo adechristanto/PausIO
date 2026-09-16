@@ -4,6 +4,7 @@
   import pausioMark from '../assets/pausio-mark.svg'
   import { onMount, tick } from 'svelte'
   import { t } from '../lib/i18n'
+  import { pauseChoices } from '../lib/pauseChoices'
   import type { BreakKind, Settings, Snapshot } from '../lib/types'
 
   interface Props {
@@ -19,12 +20,6 @@
   let pauseTrigger = $state<HTMLButtonElement>()
   let pauseMenuEl = $state<HTMLElement>()
   let pauseMenuOpen = $state(false)
-
-  const pauseChoices = [
-    { minutes: 30, labelKey: 'break_pause_30' },
-    { minutes: 60, labelKey: 'break_pause_60' },
-    { minutes: 120, labelKey: 'break_pause_120' },
-  ] as const
 
   const dueKind = (value: Snapshot | null): BreakKind => {
     if (value && typeof value.phase === 'object' && 'break_due' in value.phase) {

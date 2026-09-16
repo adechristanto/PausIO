@@ -146,7 +146,10 @@ describe('analyzeHistory', () => {
       new Date('2026-07-26T14:00:00Z'),
       2
     )
-    expect(analytics.today.percent).toBe(80)
+    // 4 of 5 due breaks are resolved (1 is still pending, not yet missed, since
+    // "now" is the same day) -- percent is completed/resolved (4/4 = 100), not
+    // completed/due (4/5 = 80), so a still-open break doesn't drag today down.
+    expect(analytics.today.percent).toBe(100)
     expect(analytics.streakDays).toBe(2)
   })
 
@@ -162,6 +165,23 @@ describe('analyzeHistory', () => {
       1
     )
     expect(analytics.today).toMatchObject({ due: 1, completed: 1, percent: 100 })
+  })
+
+  it('reports percent against resolved breaks, not all due breaks -- fixing the "25%" vs "1 of 1 resolved" mismatch', () => {
+    const analytics = analyzeHistory(
+      [
+        { ...at('2026-07-26', 'due'), break_id: 'resolved-1' },
+        { ...at('2026-07-26', 'completed'), break_id: 'resolved-1' },
+        { ...at('2026-07-26', 'due'), break_id: 'pending-1' },
+        { ...at('2026-07-26', 'due'), break_id: 'pending-2' },
+        { ...at('2026-07-26', 'due'), break_id: 'pending-3' },
+      ],
+      new Date('2026-07-26T14:00:00Z'),
+      1
+    )
+    // 4 breaks due, only 1 resolved (completed) -- the other 3 are still pending.
+    // Percent must read 100 (1 of 1 resolved breaks completed), not 25 (1 of 4 due).
+    expect(analytics.today).toMatchObject({ due: 4, completed: 1, resolved: 1, percent: 100 })
   })
 
   it('never credits a skipped break as completed, and reports it separately', () => {
@@ -202,7 +222,10 @@ describe('bucketByPeriod', () => {
     )
     const months = bucketByPeriod(analytics.days, 'month')
     expect(months).toHaveLength(1)
-    expect(months[0]).toMatchObject({ key: '2026-07', due: 4, completed: 2, percent: 50 })
+    // 3 of the 4 due breaks are resolved (the one on 07-30 is still pending, since
+    // "now" is 07-30) -- percent is completed/resolved (2/3 ≈ 67), not
+    // completed/due (2/4 = 50), so a still-open break doesn't drag the month down.
+    expect(months[0]).toMatchObject({ key: '2026-07', due: 4, completed: 2, resolved: 3, percent: 67 })
   })
 
   it('splits a 30-day span across multiple week buckets', () => {

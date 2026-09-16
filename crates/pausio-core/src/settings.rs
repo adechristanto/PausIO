@@ -57,6 +57,12 @@ pub struct Settings {
     /// retention periods are intentionally small and predictable.
     #[serde(default)]
     pub history_retention_days: Option<u16>,
+    /// Off by default: the underlying 70/20/10 weighting has not been
+    /// validated as something people find useful, so it stays hidden from
+    /// the default analytics view until that research exists, rather than
+    /// only being gated on having enough resolved breaks to compute it.
+    #[serde(default)]
+    pub show_routine_score: bool,
     /// Which lifecycle moments play `notification_sound_name`: the break-due
     /// reminder surfacing (the persistent prompt, or the native notification
     /// in quieter styles), the natural end of a break, both, or neither.
@@ -163,9 +169,12 @@ pub enum DisplayTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BreakRoutine {
-    #[default]
     Guided,
     Quiet,
+    // A single stable "look away" instruction is the default: a 20s short
+    // break cycling through 4 guided instructions every 5s is busier than a
+    // restful break should be. Guided remains a fully available opt-in choice.
+    #[default]
     FarGaze,
     Blink,
     Posture,
@@ -221,9 +230,10 @@ impl Default for Settings {
             locale: Locale::En,
             break_messages: vec![],
             display_target: DisplayTarget::All,
-            break_routine: BreakRoutine::Guided,
+            break_routine: BreakRoutine::FarGaze,
             history_enabled: default_history_enabled(),
             history_retention_days: Some(365),
+            show_routine_score: false,
             sound_timing: SoundTiming::default(),
             notification_sound_name: SystemSound::Default,
             fixed_break_minutes: vec![],

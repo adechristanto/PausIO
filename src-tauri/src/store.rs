@@ -181,16 +181,17 @@ pub(crate) fn persist_session(app: &AppHandle, checkpoint: &SessionCheckpoint) -
     store.save().map_err(internal_error)
 }
 
-pub(crate) fn append_history(
-    app: &AppHandle,
+/// The pure part of `append_history` (append, retain, cap) -- pulled out so it
+/// can be exercised and timed without a running Tauri store. See
+/// `tests::append_history_stays_fast_at_the_history_cap` below: before
+/// changing this to something other than an in-memory rewrite (e.g. an
+/// append-only log), benchmark it at realistic sizes first, per the product
+/// audit's own guidance not to optimize speculatively.
+pub(crate) fn apply_retention_and_cap(
+    mut history: Vec<HistoryEvent>,
     entries: Vec<HistoryEvent>,
     retention_days: Option<u16>,
-) -> ApiResult<()> {
-    let store = app.store(history_store_name()).map_err(internal_error)?;
-    let mut history = store
-        .get("history")
-        .and_then(|value| serde_json::from_value::<Vec<HistoryEvent>>(value).ok())
-        .unwrap_or_default();
+) -> Vec<HistoryEvent> {
     history.extend(entries);
     if let Some(days) = retention_days {
         let cutoff = Utc::now() - chrono::Duration::days(i64::from(days));
@@ -200,6 +201,20 @@ pub(crate) fn append_history(
     if drain > 0 {
         history.drain(..drain);
     }
+    history
+}
+
+pub(crate) fn append_history(
+    app: &AppHandle,
+    entries: Vec<HistoryEvent>,
+    retention_days: Option<u16>,
+) -> ApiResult<()> {
+    let store = app.store(history_store_name()).map_err(internal_error)?;
+    let history = store
+        .get("history")
+        .and_then(|value| serde_json::from_value::<Vec<HistoryEvent>>(value).ok())
+        .unwrap_or_default();
+    let history = apply_retention_and_cap(history, entries, retention_days);
     store.set(
         "history",
         serde_json::to_value(history).map_err(internal_error)?,
@@ -323,6 +338,59 @@ mod tests {
     use pausio_protocol::BreakKind;
 
     use super::history_break_id;
+    use super::{HISTORY_LIMIT, HistoryEvent, HistoryEventKind, apply_retention_and_cap};
+
+    fn synthetic_history(count: usize) -> Vec<HistoryEvent> {
+        let now = chrono::Utc::now();
+        (0..count)
+            .map(|i| HistoryEvent {
+                schema_version: super::history_schema_version(),
+                break_id: Some(format!("break-{i}")),
+                occurred_at: now - chrono::Duration::seconds(i as i64),
+                kind: HistoryEventKind::Completed,
+                break_kind: Some(BreakKind::Short),
+                context: None,
+                target_break_seconds: Some(20),
+                work_interval_seconds: Some(1200),
+                schedule_fingerprint: Some("1200:20".into()),
+            })
+            .collect()
+    }
+
+    /// Not a correctness test -- a recorded timing, per the product audit's
+    /// "benchmark before optimizing" guidance: `append_history` currently does
+    /// a full in-memory load/extend/retain/drain/rewrite on every append, up to
+    /// `HISTORY_LIMIT` (50,000) events. This exercises that pipeline (minus the
+    /// Tauri store I/O itself) at the cap and asserts it stays comfortably
+    /// fast, so a future change to something like an append-only log is a
+    /// decision backed by a measurement, not a guess. If this ever approaches
+    /// the threshold, that's the signal to actually design pagination --
+    /// don't preemptively build it before this test says it's warranted.
+    #[test]
+    fn append_history_stays_fast_at_the_history_cap() {
+        let existing = synthetic_history(HISTORY_LIMIT);
+        let incoming = synthetic_history(5);
+        let stored_json = serde_json::to_value(&existing).expect("serialize fixture");
+
+        // Times the same round trip `append_history` performs against the real
+        // Tauri store: deserialize what's on disk, append+retain+cap, re-serialize.
+        // The store's own read/write I/O is not included -- that's a constant,
+        // separately-measurable cost, not what a pagination redesign would change.
+        let started = std::time::Instant::now();
+        let loaded: Vec<HistoryEvent> =
+            serde_json::from_value(stored_json).expect("deserialize fixture");
+        let result = apply_retention_and_cap(loaded, incoming, None);
+        let _reserialized = serde_json::to_value(&result).expect("reserialize result");
+        let elapsed = started.elapsed();
+
+        assert_eq!(result.len(), HISTORY_LIMIT);
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "the deserialize/append/retain/cap/reserialize round trip took {elapsed:?} at \
+             the {HISTORY_LIMIT}-event cap -- investigate before assuming pagination is \
+             needed, per the audit's own guidance not to optimize speculatively"
+        );
+    }
 
     #[test]
     fn postponement_keeps_one_break_id_until_resolution() {

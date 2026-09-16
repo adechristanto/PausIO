@@ -92,6 +92,7 @@ macro_rules! register_commands {
             commands::get_health_report,
             commands::test_reminder,
             commands::preview_system_sound,
+            commands::watch_sync_available,
             $($additional),*
         ])
     };

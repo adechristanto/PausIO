@@ -85,7 +85,21 @@ describe('break overlay', () => {
     render(BreakOverlay, { state, settings, primary: true })
     expect(screen.getByRole('heading', { name: 'Look somewhere far away.' })).toBeTruthy()
     expect(document.querySelector('.horizon-timer strong')?.textContent).toBe('00:14')
-    expect(screen.getByText('Blink slowly five times.')).toBeTruthy()
+    // Default routine is the single stable far-gaze instruction, not the
+    // multi-step guided reset (see the dedicated guided-routine test below).
+    expect(screen.getByText('Soften your gaze and find a distant point.')).toBeTruthy()
+  })
+
+  it('stays on one stable far-gaze instruction by default, unlike the multi-step guided routine', () => {
+    const state: Snapshot = {
+      phase: { breaking: { kind: 'short' } },
+      remaining_seconds: 5,
+      completed_short_breaks: 0,
+      postpones_today: 0,
+    }
+    render(BreakOverlay, { state, settings, primary: true })
+    expect(screen.queryByText(/Gentle reset/)).toBeNull()
+    expect(screen.getByText('Soften your gaze and find a distant point.')).toBeTruthy()
   })
 
   it('shows the long-break heading for a long break', () => {
@@ -99,7 +113,10 @@ describe('break overlay', () => {
     expect(screen.getByRole('heading', { name: 'Step away for a moment.' })).toBeTruthy()
   })
 
-  it('advances the guided reset throughout a whole long break, instead of freezing on step 4 after 20s', () => {
+  it('advances the guided reset throughout a whole long break, instead of freezing on step 4 after 20s, when explicitly chosen', () => {
+    // Guided is no longer the default (see far-gaze tests above), but remains fully
+    // available as an explicit choice, and its own multi-step pacing must still work.
+    const guidedSettings: Settings = { ...settings, break_routine: 'guided' }
     // 300s long break: at 20s elapsed the fixed-5s-per-step cadence this replaces would
     // already be on the last step, frozen there for the remaining 4m40s. Proportional
     // pacing (300s / 4 steps = 75s/step) should still be on step 1.
@@ -109,7 +126,7 @@ describe('break overlay', () => {
       completed_short_breaks: 0,
       postpones_today: 0,
     }
-    render(BreakOverlay, { state: early, settings, primary: true })
+    render(BreakOverlay, { state: early, settings: guidedSettings, primary: true })
     expect(screen.getByText('Gentle reset · step 1 of 4')).toBeTruthy()
     cleanup()
 
@@ -120,7 +137,7 @@ describe('break overlay', () => {
       completed_short_breaks: 0,
       postpones_today: 0,
     }
-    render(BreakOverlay, { state: mid, settings, primary: true })
+    render(BreakOverlay, { state: mid, settings: guidedSettings, primary: true })
     expect(screen.getByText('Gentle reset · step 3 of 4')).toBeTruthy()
     cleanup()
 
@@ -131,7 +148,7 @@ describe('break overlay', () => {
       completed_short_breaks: 0,
       postpones_today: 0,
     }
-    render(BreakOverlay, { state: late, settings, primary: true })
+    render(BreakOverlay, { state: late, settings: guidedSettings, primary: true })
     expect(screen.getByText('Gentle reset · step 4 of 4')).toBeTruthy()
   })
 
