@@ -225,7 +225,13 @@ describe('bucketByPeriod', () => {
     // 3 of the 4 due breaks are resolved (the one on 07-30 is still pending, since
     // "now" is 07-30) -- percent is completed/resolved (2/3 ≈ 67), not
     // completed/due (2/4 = 50), so a still-open break doesn't drag the month down.
-    expect(months[0]).toMatchObject({ key: '2026-07', due: 4, completed: 2, resolved: 3, percent: 67 })
+    expect(months[0]).toMatchObject({
+      key: '2026-07',
+      due: 4,
+      completed: 2,
+      resolved: 3,
+      percent: 67,
+    })
   })
 
   it('splits a 30-day span across multiple week buckets', () => {

@@ -752,7 +752,9 @@
           {/each}
           {#if invalidFixedBreakEntries.length}
             <small class="setting-warning" role="alert">
-              {t('fixed_break_unparseable_warning', { entries: invalidFixedBreakEntries.join(', ') })}
+              {t('fixed_break_unparseable_warning', {
+                entries: invalidFixedBreakEntries.join(', '),
+              })}
             </small>
           {/if}
           {#if fixedBreakOverflowCount > 0}

@@ -492,7 +492,9 @@
       .filter((entry) => !Number.isFinite(entry.minute))
       .map((entry) => entry.raw)
     const validMinutes = [
-      ...new Set(parsed.filter((entry) => Number.isFinite(entry.minute)).map((entry) => entry.minute)),
+      ...new Set(
+        parsed.filter((entry) => Number.isFinite(entry.minute)).map((entry) => entry.minute)
+      ),
     ].sort((left, right) => left - right)
     fixedBreakOverflowCount = Math.max(0, validMinutes.length - 12)
     const minutes = validMinutes.slice(0, 12)

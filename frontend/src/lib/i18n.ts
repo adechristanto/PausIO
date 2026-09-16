@@ -377,8 +377,7 @@ const english = {
   watch_state_unavailable: 'Not available on desktop',
   wearable_action_unavailable: 'Watch companion isn’t available on this device.',
   wearable_action_unpaired: 'Pair your watch in the Watch app, then open PausIO on it.',
-  wearable_action_app_not_installed:
-    'Install PausIO on your watch from the Watch app’s App Store.',
+  wearable_action_app_not_installed: 'Install PausIO on your watch from the Watch app’s App Store.',
   wearable_action_activating: 'Setting up your watch — this can take a minute.',
   wearable_action_disconnected:
     'Bring your watch and phone close together, then try syncing again.',
@@ -913,8 +912,7 @@ const german: Record<LocalizationKey, string> = {
   watch_state_unpaired: 'Keine Watch gekoppelt',
   watch_state_unavailable: 'Auf dem Desktop nicht verfügbar',
   wearable_action_unavailable: 'Die Watch-Anbindung ist auf diesem Gerät nicht verfügbar.',
-  wearable_action_unpaired:
-    'Kopple deine Watch in der Watch-App und öffne dann PausIO darauf.',
+  wearable_action_unpaired: 'Kopple deine Watch in der Watch-App und öffne dann PausIO darauf.',
   wearable_action_app_not_installed:
     'Installiere PausIO auf deiner Watch über den App Store der Watch-App.',
   wearable_action_activating: 'Deine Watch wird eingerichtet — das kann einen Moment dauern.',

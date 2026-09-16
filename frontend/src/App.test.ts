@@ -1255,7 +1255,9 @@ describe('Quiet Horizon app experience', () => {
       await fireEvent.click(wizard().getByRole('button', { name: 'Eye break now' }))
       await waitFor(() => expect(apiMock.takeBreakNow).toHaveBeenCalledOnce())
       expect(
-        await wizard().findByText("Couldn't start the test break. You can try again or continue setup.")
+        await wizard().findByText(
+          "Couldn't start the test break. You can try again or continue setup."
+        )
       ).toBeTruthy()
       expect(wizard().queryByText(/look away for a moment/)).toBeNull()
     })

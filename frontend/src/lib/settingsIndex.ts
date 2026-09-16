@@ -28,7 +28,12 @@ export interface SettingsIndexEntry {
 
 export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   // Breaks -- default view
-  { category: 'breaks', advanced: false, labelKey: 'presets_heading', controlId: 'setting-presets' },
+  {
+    category: 'breaks',
+    advanced: false,
+    labelKey: 'presets_heading',
+    controlId: 'setting-presets',
+  },
   {
     category: 'breaks',
     advanced: false,
@@ -175,7 +180,12 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     labelKey: 'setting_language',
     controlId: 'setting-language',
   },
-  { category: 'appearance', advanced: false, labelKey: 'setting_theme', controlId: 'setting-theme' },
+  {
+    category: 'appearance',
+    advanced: false,
+    labelKey: 'setting_theme',
+    controlId: 'setting-theme',
+  },
   {
     category: 'appearance',
     advanced: false,
