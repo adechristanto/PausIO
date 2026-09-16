@@ -384,8 +384,12 @@ mod tests {
         let elapsed = started.elapsed();
 
         assert_eq!(result.len(), HISTORY_LIMIT);
+        // Generous on purpose: this is a regression guard against an algorithmic
+        // change (e.g. accidentally going quadratic), not a strict perf budget --
+        // a shared/contended CI runner can be several times slower than a local
+        // machine for the same code, and this happens off the UI thread besides.
         assert!(
-            elapsed < std::time::Duration::from_millis(500),
+            elapsed < std::time::Duration::from_millis(2500),
             "the deserialize/append/retain/cap/reserialize round trip took {elapsed:?} at \
              the {HISTORY_LIMIT}-event cap -- investigate before assuming pagination is \
              needed, per the audit's own guidance not to optimize speculatively"
