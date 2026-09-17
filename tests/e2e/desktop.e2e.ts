@@ -89,20 +89,26 @@ describe('PausIO desktop vertical slice', () => {
     expect(failure).toMatch(/get_watch_status|not found|unknown/i)
   })
 
-  it('subtracts locked time once and starts fresh when the work interval is exhausted', async () => {
+  it('credits locked time back to the countdown, capped at a full work interval', async () => {
+    const settings = await invoke<{ work_seconds: number }>('get_settings')
     const before = await invoke<EngineSnapshot>('get_state')
+
     const shortLock = await invoke<EngineSnapshot>('e2e_simulate_screen_lock', {
       lockedSeconds: 19,
     })
-    const expectedRemaining = before.remaining_seconds - 19
+    // Locked time winds the countdown up, never down. This distinguishes the two
+    // directions even with the countdown sitting near full: crediting clamps at
+    // the cap, whereas subtracting would visibly drop it below.
+    const expectedRemaining = Math.min(settings.work_seconds, before.remaining_seconds + 19)
     expect(shortLock.remaining_seconds).toBeGreaterThanOrEqual(expectedRemaining - 1)
-    expect(shortLock.remaining_seconds).toBeLessThanOrEqual(expectedRemaining + 1)
+    expect(shortLock.remaining_seconds).toBeLessThanOrEqual(expectedRemaining)
     expect(shortLock.phase).toEqual(before.phase)
     expect(shortLock.completed_short_breaks).toBe(before.completed_short_breaks)
 
-    const settings = await invoke<{ work_seconds: number }>('get_settings')
+    // A lock longer than the interval lands exactly on a fresh one, and never
+    // resolves as a break.
     const recovered = await invoke<EngineSnapshot>('e2e_simulate_screen_lock', {
-      lockedSeconds: shortLock.remaining_seconds,
+      lockedSeconds: settings.work_seconds * 2,
     })
     expect(recovered.remaining_seconds).toBe(settings.work_seconds)
     expect(recovered.phase).toEqual('working')

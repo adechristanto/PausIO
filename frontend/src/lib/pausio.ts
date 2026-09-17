@@ -7,7 +7,9 @@ import type {
   ContextReason,
   DesktopHealth,
   HistoryEvent,
+  NotificationPermission,
   NudgeResult,
+  ReminderScheduleReport,
   Settings,
   SettingsProfiles,
   Snapshot,
@@ -44,6 +46,11 @@ export const api = {
   syncWatchSettings: () => invoke<WatchSettingsEnvelopeV1>('sync_watch_settings'),
   sendTestNudge: () => invoke<NudgeResult>('send_test_nudge'),
   getWatchStatus: () => invoke<WatchStatus>('get_watch_status'),
+  /** Phone-only. The permission that standalone break delivery depends on. */
+  getNotificationPermission: () => invoke<NotificationPermission>('get_notification_permission'),
+  requestNotificationPermission: () =>
+    invoke<NotificationPermission>('request_notification_permission'),
+  getReminderPlanStatus: () => invoke<ReminderScheduleReport>('get_reminder_plan_status'),
   getAutostartStatus: () => invoke<AutostartStatus>('get_autostart_status'),
   setAutostartEnabled: (enabled: boolean) =>
     invoke<AutostartStatus>('set_autostart_enabled', { enabled }),

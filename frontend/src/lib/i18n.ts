@@ -396,6 +396,31 @@ const english = {
   wearables_precision_unavailable: 'precision unavailable',
   diagnostics_checking: 'Checking…',
 
+  // Standalone phone delivery and the optional watch connection.
+  setting_alert_target: 'Alert me on',
+  setting_alert_target_hint:
+    'Your phone reminds you on its own. Choose your watch instead for a private buzz on a shared screen.',
+  alert_target_phone: 'This phone',
+  alert_target_watch: 'My watch',
+  alert_target_both: 'Both',
+  alert_target_watch_without_connection:
+    'No watch is connected, so nothing will remind you. Connect one below, or alert on this phone.',
+  phone_reminders_heading: 'Break reminders',
+  phone_permission: 'Notifications: {state}',
+  phone_permission_required:
+    'Notifications are turned off, so breaks cannot reach you. Allow them to use PausIO on this phone.',
+  phone_permission_allow: 'Allow notifications',
+  phone_reminders_scheduled: 'Scheduled ahead: {value}',
+  phone_reminders_horizon: 'Scheduled through: {value}',
+  phone_reminders_none: 'none',
+  phone_reminders_inexact:
+    'Exact alarms are turned off for PausIO, so breaks may arrive a few minutes late.',
+  phone_reminders_test: 'Send a test reminder',
+  watch_connect: 'Connect a watch',
+  watch_connect_hint:
+    'Optional. PausIO works on this phone alone; connect a watch to also get a wrist buzz.',
+  watch_disconnected_note: 'No watch is connected. Your phone handles reminders on its own.',
+
   unit_minutes: '{value} minutes',
   unit_seconds_value: '{value} seconds',
   unit_seconds_short: 's',
@@ -932,6 +957,31 @@ const german: Record<LocalizationKey, string> = {
   wearables_inexact: 'Zeitpunkt kann verspätet sein',
   wearables_precision_unavailable: 'Genauigkeit nicht verfügbar',
   diagnostics_checking: 'Wird geprüft…',
+
+  setting_alert_target: 'Erinnern auf',
+  setting_alert_target_hint:
+    'Dein Telefon erinnert dich von selbst. Wähle stattdessen deine Watch für einen privaten Impuls bei geteiltem Bildschirm.',
+  alert_target_phone: 'Diesem Telefon',
+  alert_target_watch: 'Meiner Watch',
+  alert_target_both: 'Beidem',
+  alert_target_watch_without_connection:
+    'Es ist keine Watch verbunden, daher erinnert dich nichts. Verbinde unten eine oder erinnere auf diesem Telefon.',
+  phone_reminders_heading: 'Pausenerinnerungen',
+  phone_permission: 'Mitteilungen: {state}',
+  phone_permission_required:
+    'Mitteilungen sind deaktiviert, daher können Pausen dich nicht erreichen. Erlaube sie, um PausIO auf diesem Telefon zu nutzen.',
+  phone_permission_allow: 'Mitteilungen erlauben',
+  phone_reminders_scheduled: 'Im Voraus geplant: {value}',
+  phone_reminders_horizon: 'Geplant bis: {value}',
+  phone_reminders_none: 'keine',
+  phone_reminders_inexact:
+    'Exakte Alarme sind für PausIO deaktiviert, daher können Pausen einige Minuten später eintreffen.',
+  phone_reminders_test: 'Testerinnerung senden',
+  watch_connect: 'Watch verbinden',
+  watch_connect_hint:
+    'Optional. PausIO funktioniert allein auf diesem Telefon; verbinde eine Watch für einen zusätzlichen Impuls am Handgelenk.',
+  watch_disconnected_note:
+    'Es ist keine Watch verbunden. Dein Telefon übernimmt die Erinnerungen selbst.',
   unit_minutes: '{value} Minuten',
   unit_seconds_value: '{value} Sekunden',
   unit_seconds_short: 'Sek.',

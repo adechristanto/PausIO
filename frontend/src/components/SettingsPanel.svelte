@@ -19,13 +19,16 @@
   import { tooltip } from '../lib/tooltip'
   import type {
     Accent,
+    AlertTarget,
     AutostartStatus,
     BreakRoutine,
     ContextReason,
     DesktopHealth,
     DisplayTarget,
     Locale,
+    NotificationPermission,
     NudgeResult,
+    ReminderScheduleReport,
     Settings,
     SettingsProfiles,
     Snapshot,
@@ -69,6 +72,10 @@
     setAutostart: (enabled: boolean) => Promise<void>
     syncWatchSettings?: () => Promise<void>
     sendTestNudge?: () => Promise<void>
+    /** Phone only: the permission standalone break delivery depends on. */
+    notificationPermission?: NotificationPermission | null
+    requestNotificationPermission?: () => Promise<void>
+    reminderPlan?: ReminderScheduleReport | null
     exportHealthReport: () => Promise<void>
     resetLocalData: () => Promise<void>
     profiles?: SettingsProfiles
@@ -110,6 +117,9 @@
     setAutostart,
     syncWatchSettings,
     sendTestNudge,
+    notificationPermission = null,
+    requestNotificationPermission,
+    reminderPlan = null,
     exportHealthReport,
     resetLocalData,
     profiles = {},
@@ -159,6 +169,17 @@
       : state === 'inexact'
         ? t('wearables_inexact')
         : t('wearables_precision_unavailable')
+
+  // Standalone-phone state. The phone alerts on its own by default; a watch is
+  // an explicit opt-in, so these are kept separate from the watch's own status.
+  const watchConnected = $derived(settings.watch_enabled === true)
+  const alertTarget = $derived<AlertTarget>(settings.alert_target ?? 'phone')
+  const phoneAlerts = $derived(alertTarget === 'phone' || alertTarget === 'both')
+  // Asking for the wrist with nothing on it means no reminder reaches anyone.
+  // That is a silent dead end, so it is called out rather than left to be
+  // discovered when a break never arrives.
+  const alertTargetUnreachable = $derived(alertTarget === 'watch' && !watchConnected)
+  const phoneNotificationsBlocked = $derived(phoneAlerts && notificationPermission === 'denied')
 
   const deliveryMode = $derived(deliveryModeOf(settings))
   const coversScreen = $derived(deliveryMode !== 'notify')
@@ -293,6 +314,41 @@
             <small class="setting-warning" role="alert">{t('delivery_no_notice_warning')}</small>
           {/if}
         </div>
+        {#if isMobile}
+          <label class="select-row">
+            <span
+              ><strong>{t('setting_alert_target')}</strong><small
+                >{t('setting_alert_target_hint')}</small
+              ></span
+            >
+            <select
+              id="setting-alert-target"
+              value={alertTarget}
+              onchange={(event) =>
+                editSettings({
+                  ...settings!,
+                  alert_target: event.currentTarget.value as AlertTarget,
+                })}
+            >
+              {#each ['phone', 'watch', 'both'] as target}
+                <option value={target}
+                  >{t(
+                    `alert_target_${target}` as
+                      'alert_target_phone' | 'alert_target_watch' | 'alert_target_both'
+                  )}</option
+                >
+              {/each}
+            </select>
+          </label>
+          {#if alertTargetUnreachable}
+            <small class="setting-warning" role="alert"
+              >{t('alert_target_watch_without_connection')}</small
+            >
+          {/if}
+          {#if phoneNotificationsBlocked}
+            <small class="setting-warning" role="alert">{t('phone_permission_required')}</small>
+          {/if}
+        {/if}
         {#if !isMobile && coversScreen}
           <label class="select-row">
             <span>{t('setting_display_target')}</span>
@@ -1136,7 +1192,48 @@
     </section>
   {/if}
 
-  {#if settingsCategory === 'wearables' && isMobile && syncWatchSettings}
+  {#if settingsCategory === 'wearables' && isMobile}
+    <section class="settings-section" aria-labelledby="phone-reminders-heading">
+      <div class="section-heading">
+        <div>
+          <h2 id="phone-reminders-heading">{t('phone_reminders_heading')}</h2>
+          <p>{t('watch_connect_hint')}</p>
+        </div>
+      </div>
+      <div class="setting-list">
+        <p>
+          {t('phone_permission', { state: permissionLabel(notificationPermission ?? 'unknown') })}
+        </p>
+        {#if notificationPermission !== 'granted' && requestNotificationPermission}
+          <p class="setting-warning" role="alert">{t('phone_permission_required')}</p>
+          <button class="button button-primary" onclick={requestNotificationPermission}
+            >{t('phone_permission_allow')}</button
+          >
+        {/if}
+        {#if phoneAlerts && reminderPlan}
+          <p>{t('phone_reminders_scheduled', { value: String(reminderPlan.scheduled) })}</p>
+          <p>
+            {t('phone_reminders_horizon', {
+              value: reminderPlan.horizon_at
+                ? new Date(reminderPlan.horizon_at).toLocaleString(appLocale())
+                : t('phone_reminders_none'),
+            })}
+          </p>
+          {#if reminderPlan.precision === 'inexact'}
+            <p class="setting-warning" role="alert">{t('phone_reminders_inexact')}</p>
+          {/if}
+          {#if reminderPlan.last_error}
+            <p class="setting-warning" role="alert">
+              {t('wearables_degraded', { value: reminderPlan.last_error })}
+            </p>
+          {/if}
+        {/if}
+        <button class="button button-secondary" onclick={testReminder}
+          >{t('phone_reminders_test')}</button
+        >
+      </div>
+    </section>
+
     <section class="settings-section wearable-settings" aria-labelledby="wearables-heading">
       <div class="section-heading">
         <span class="section-icon" aria-hidden="true"
@@ -1151,52 +1248,73 @@
           <p>{t('wearables_hint')}</p>
         </div>
       </div>
-      <div class="setting-list wearable-status-list">
-        <div class="wearable-connection" class:connected={watchStatus?.reachable}>
-          <span class="wearable-connection-dot" aria-hidden="true"></span>
-          <strong>{t('watch_status', { state: watchStateLabel(watchStatus) })}</strong>
-        </div>
-        {#if watchActionHint(watchStatus ?? null)}
-          <p class="wearable-action-hint">{watchActionHint(watchStatus ?? null)}</p>
+      <div class="setting-list">
+        <label class="switch-row">
+          <span>{t('watch_connect')}</span>
+          <input
+            id="setting-watch-enabled"
+            type="checkbox"
+            checked={watchConnected}
+            onchange={(event) =>
+              editSettings({ ...settings!, watch_enabled: event.currentTarget.checked })}
+          />
+        </label>
+        {#if !watchConnected}
+          <p>{t('watch_disconnected_note')}</p>
         {/if}
-        <p>
-          {t('wearables_permission', {
-            state: permissionLabel(watchStatus?.notification_permission ?? 'unknown'),
-          })}
-        </p>
-        <p>
-          {t('wearables_precision', {
-            state: precisionLabel(watchStatus?.reminder_precision),
-          })}
-        </p>
-        <p>
-          {t('wearables_horizon', {
-            value: watchStatus?.schedule_horizon_at
-              ? new Date(watchStatus.schedule_horizon_at).toLocaleString(appLocale())
-              : t('watch_unknown_revision'),
-          })}
-        </p>
-        {#if watchStatus?.last_error}<p>
-            {t('wearables_degraded', { value: watchStatus.last_error })}
-          </p>{/if}
-        {#if nudgeResult}<p>
-            {t('watch_nudge_result', {
-              value: t(
-                `nudge_result_${nudgeResult}` as
-                  'nudge_result_delivered' | 'nudge_result_queued' | 'nudge_result_unavailable'
-              ),
-            })}
-          </p>{/if}
-        <div class="wearable-actions">
-          <button class="button button-secondary" onclick={syncWatchSettings}
-            >{t('watch_sync')}</button
-          >
-          {#if watchStatus?.reachable && watchStatus.capabilities?.test_haptic}
-            <button class="button button-primary" onclick={sendTestNudge}>{t('watch_nudge')}</button
-            >
-          {/if}
-        </div>
       </div>
+      <!-- Status, diagnostics, and the test buzz only exist once a watch has
+           actually been connected: until then there is nothing to report and
+           nothing to test. -->
+      {#if watchConnected && syncWatchSettings}
+        <div class="setting-list wearable-status-list">
+          <div class="wearable-connection" class:connected={watchStatus?.reachable}>
+            <span class="wearable-connection-dot" aria-hidden="true"></span>
+            <strong>{t('watch_status', { state: watchStateLabel(watchStatus) })}</strong>
+          </div>
+          {#if watchActionHint(watchStatus ?? null)}
+            <p class="wearable-action-hint">{watchActionHint(watchStatus ?? null)}</p>
+          {/if}
+          <p>
+            {t('wearables_permission', {
+              state: permissionLabel(watchStatus?.notification_permission ?? 'unknown'),
+            })}
+          </p>
+          <p>
+            {t('wearables_precision', {
+              state: precisionLabel(watchStatus?.reminder_precision),
+            })}
+          </p>
+          <p>
+            {t('wearables_horizon', {
+              value: watchStatus?.schedule_horizon_at
+                ? new Date(watchStatus.schedule_horizon_at).toLocaleString(appLocale())
+                : t('watch_unknown_revision'),
+            })}
+          </p>
+          {#if watchStatus?.last_error}<p>
+              {t('wearables_degraded', { value: watchStatus.last_error })}
+            </p>{/if}
+          {#if nudgeResult}<p>
+              {t('watch_nudge_result', {
+                value: t(
+                  `nudge_result_${nudgeResult}` as
+                    'nudge_result_delivered' | 'nudge_result_queued' | 'nudge_result_unavailable'
+                ),
+              })}
+            </p>{/if}
+          <div class="wearable-actions">
+            <button class="button button-secondary" onclick={syncWatchSettings}
+              >{t('watch_sync')}</button
+            >
+            {#if watchStatus?.reachable && watchStatus.capabilities?.test_haptic}
+              <button class="button button-primary" onclick={sendTestNudge}
+                >{t('watch_nudge')}</button
+              >
+            {/if}
+          </div>
+        </div>
+      {/if}
     </section>
   {/if}
 </section>

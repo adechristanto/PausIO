@@ -47,6 +47,9 @@ const apiMock = vi.hoisted(() => ({
   syncWatchSettings: vi.fn<() => Promise<never>>(),
   sendTestNudge: vi.fn<() => Promise<'delivered'>>(),
   getWatchStatus: vi.fn(),
+  getNotificationPermission: vi.fn(),
+  requestNotificationPermission: vi.fn(),
+  getReminderPlanStatus: vi.fn(),
   getAutostartStatus: vi.fn<() => Promise<AutostartStatus>>(),
   setAutostartEnabled: vi.fn<(enabled: boolean) => Promise<AutostartStatus>>(),
   getDesktopHealth: vi.fn(),
@@ -122,6 +125,15 @@ describe('Quiet Horizon app experience', () => {
         test_haptic: true,
         remote_actions: true,
       },
+    })
+    apiMock.getNotificationPermission.mockResolvedValue('granted')
+    apiMock.requestNotificationPermission.mockResolvedValue('granted')
+    apiMock.getReminderPlanStatus.mockResolvedValue({
+      scheduled: 12,
+      horizon_at: '2026-07-27T18:00:00Z',
+      precision: 'exact',
+      permission: 'granted',
+      last_error: null,
     })
     apiMock.getAutostartStatus.mockResolvedValue({ supported: true, enabled: false })
     apiMock.setAutostartEnabled.mockImplementation(async (enabled) => ({
@@ -471,6 +483,8 @@ describe('Quiet Horizon app experience', () => {
         remote_actions: true,
       },
     })
+    // A watch is opt-in, so this host has one connected already.
+    apiMock.getSettings.mockResolvedValue({ ...settings, watch_enabled: true })
     render(App)
     await screen.findByRole('heading', { name: 'Next eye break' })
     await waitFor(() => expect(apiMock.getWatchStatus).toHaveBeenCalled())
@@ -492,6 +506,147 @@ describe('Quiet Horizon app experience', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Send test buzz' }))
     expect(apiMock.syncWatchSettings).toHaveBeenCalled()
     expect(apiMock.sendTestNudge).toHaveBeenCalled()
+  })
+
+  /** The whole point of standalone: a phone with nothing paired still works. */
+  it('runs standalone on a phone and never contacts a watch nobody connected', async () => {
+    apiMock.getDesktopHealth.mockResolvedValue({
+      platform: 'android',
+      notification_permission: 'granted',
+      display_count: 0,
+      autostart_supported: false,
+      autostart_enabled: false,
+      history_enabled: false,
+      history_retention_days: 30,
+      display_target: 'all',
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
+    })
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await waitFor(() => expect(apiMock.getReminderPlanStatus).toHaveBeenCalled())
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Wearables' }))
+
+    // The phone's own reminder status is shown...
+    expect(await screen.findByText(/Scheduled ahead: 12/)).toBeTruthy()
+    expect(screen.getByText(/No watch is connected/)).toBeTruthy()
+    // ...and nothing is sent to a wearable that was never connected.
+    expect(apiMock.getWatchStatus).not.toHaveBeenCalled()
+    expect(apiMock.syncWatchSettings).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Send test buzz' })).toBeNull()
+  })
+
+  it('lets a phone connect a watch from settings', async () => {
+    apiMock.getDesktopHealth.mockResolvedValue({
+      platform: 'android',
+      notification_permission: 'granted',
+      display_count: 0,
+      autostart_supported: false,
+      autostart_enabled: false,
+      history_enabled: false,
+      history_retention_days: 30,
+      display_target: 'all',
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
+    })
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Wearables' }))
+
+    const connect = await screen.findByLabelText('Connect a watch')
+    expect((connect as HTMLInputElement).checked).toBe(false)
+    await fireEvent.click(connect)
+    await waitFor(() =>
+      expect(apiMock.setSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ watch_enabled: true })
+      )
+    )
+  })
+
+  /** Asking for the wrist with nothing on it silences every reminder. */
+  it('warns when the alert target is a watch that is not connected', async () => {
+    apiMock.getDesktopHealth.mockResolvedValue({
+      platform: 'ios',
+      notification_permission: 'granted',
+      display_count: 0,
+      autostart_supported: false,
+      autostart_enabled: false,
+      history_enabled: false,
+      history_retention_days: 30,
+      display_target: 'all',
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
+    })
+    apiMock.getSettings.mockResolvedValue({
+      ...settings,
+      alert_target: 'watch',
+      watch_enabled: false,
+    })
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Breaks' }))
+
+    expect(
+      await screen.findByText(/No watch is connected, so nothing will remind you/)
+    ).toBeTruthy()
+  })
+
+  /** Denied notifications is a hard dead end for a standalone phone. */
+  it('warns when phone notifications are denied', async () => {
+    apiMock.getDesktopHealth.mockResolvedValue({
+      platform: 'ios',
+      notification_permission: 'denied',
+      display_count: 0,
+      autostart_supported: false,
+      autostart_enabled: false,
+      history_enabled: false,
+      history_retention_days: 30,
+      display_target: 'all',
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
+    })
+    apiMock.getNotificationPermission.mockResolvedValue('denied')
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Wearables' }))
+
+    expect(await screen.findByText(/Notifications are turned off/)).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }))
+    expect(apiMock.requestNotificationPermission).toHaveBeenCalled()
+  })
+
+  /** Degraded delivery must be visible, not discovered when a break is missed. */
+  it('reports inexact alarm precision on a phone', async () => {
+    apiMock.getDesktopHealth.mockResolvedValue({
+      platform: 'android',
+      notification_permission: 'granted',
+      display_count: 0,
+      autostart_supported: false,
+      autostart_enabled: false,
+      history_enabled: false,
+      history_retention_days: 30,
+      display_target: 'all',
+      auto_context_fullscreen_supported: false,
+      auto_context_dnd_supported: false,
+    })
+    apiMock.getReminderPlanStatus.mockResolvedValue({
+      scheduled: 4,
+      horizon_at: null,
+      precision: 'inexact',
+      permission: 'granted',
+      last_error: null,
+    })
+    render(App)
+    await screen.findByRole('heading', { name: 'Next eye break' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Wearables' }))
+
+    expect(await screen.findByText(/Exact alarms are turned off/)).toBeTruthy()
   })
 
   it('lets a desktop user opt into silent launch at login', async () => {

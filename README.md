@@ -33,7 +33,8 @@ Unlike aggressive break timers that interrupt you during presentations or video 
   - _Firm mode_: Strict focus enforcement with emergency override safeguards.
 - **Smart Context Deferrals**: Automatically delays breaks when you are actively presenting, in full screen, in Focus Assist mode, or during continuous typing bursts.
 - **Session & Idle Detection**: Pauses automatically when you step away from your computer; natural absences count towards your rest cycle.
-- **Wearable Companion Sync**: Companion apps for Apple Watch (watchOS) and Wear OS deliver private haptic wrist vibrations so you never miss a break on a shared screen.
+- **Every Device Works On Its Own**: Desktop, phone, and watch each run the full timer independently — no pairing, no companion app, no network. The phone schedules its own break reminders in advance, so they arrive even while the app is closed.
+- **Optional Wearable Companion**: Connect an Apple Watch (watchOS) or Wear OS companion from Settings for a private haptic wrist buzz, and choose whether breaks announce on your phone, your watch, or both. Off by default.
 - **Local-First & Private**: No accounts, no cloud sync, no tracking, zero outbound network telemetry.
 - **English & German** localization.
 
@@ -49,15 +50,21 @@ The release-candidate workflow may create draft releases with unsigned engineeri
 
 ## 🖥️ Platform Support
 
-| Platform        | Current maturity              | Companion / Bridge                                |
-| :-------------- | :---------------------------- | :------------------------------------------------ |
-| **macOS**       | Local engineering validated   | System tray, native sound cues, aggregate idle    |
-| **Windows**     | Build validated; runtime open | System tray, SmartScreen / Focus Assist detection |
-| **Linux**       | Build validated; runtime open | See [Wayland Roadmap](docs/LINUX_WAYLAND_PLAN.md) |
-| **Android**     | Engineering preview           | Paired Wear OS companion app                      |
-| **iOS**         | Engineering preview           | Paired Apple Watch companion app                  |
-| **Apple Watch** | Simulator-tested preview      | Native watchOS app via WatchConnectivity          |
-| **Wear OS**     | Emulator-tested preview       | Native Wear OS app via Wearable Data Layer        |
+Every platform below runs standalone. The wearable column describes what a
+device can _optionally_ connect to, never what it requires.
+
+| Platform        | Standalone | Current maturity              | Platform integration                                   |
+| :-------------- | :--------- | :---------------------------- | :----------------------------------------------------- |
+| **macOS**       | Yes        | Local engineering validated   | System tray, native sound cues, aggregate idle         |
+| **Windows**     | Yes        | Build validated; runtime open | System tray, SmartScreen / Focus Assist detection      |
+| **Linux**       | Yes        | Build validated; runtime open | See [Wayland Roadmap](docs/LINUX_WAYLAND_PLAN.md)      |
+| **Android**     | Yes        | Engineering preview           | Local alarms; optional Wear OS companion               |
+| **iOS**         | Yes        | Engineering preview           | Local notifications; optional Apple Watch companion    |
+| **Apple Watch** | Yes        | Simulator-tested preview      | Own offline schedule; syncs from iPhone when connected |
+| **Wear OS**     | Yes        | Emulator-tested preview       | Own offline alarms; syncs from Android when connected  |
+
+Desktop builds contain no wearable code at all — the bridge is compiled only
+into the iOS and Android hosts.
 
 ---
 

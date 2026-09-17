@@ -49,7 +49,6 @@ impl SessionLockState {
         Some(started.elapsed().as_secs().min(u64::from(u32::MAX)) as u32)
     }
 
-    #[cfg(target_os = "linux")]
     pub(crate) fn is_locked(&self) -> bool {
         self.started
             .lock()
@@ -125,8 +124,9 @@ impl EngineView {
 pub(crate) struct PublishBatch {
     events: Vec<EngineEvent>,
     view: EngineView,
-    /// Mobile-only: whether this transition is worth a new watch context.
-    /// Ticks deliberately are not.
+    /// Mobile-only: whether this transition moved a deadline, and therefore
+    /// needs the phone's own reminder plan rebuilt and (when a watch is
+    /// connected) a new watch context. Ticks deliberately are neither.
     #[cfg(mobile)]
     sync_watch: bool,
 }
@@ -189,6 +189,10 @@ fn publisher_loop(app: &AppHandle, receiver: std::sync::mpsc::Receiver<PublishBa
         }
         #[cfg(mobile)]
         if batch.sync_watch {
+            // The phone's own plan first: it is the delivery path that works
+            // with nothing paired, so it must not be contingent on the
+            // optional wearable hand-off that follows.
+            crate::events::refresh_reminder_plan(app, &batch.view);
             crate::events::sync_watch_state(app, &batch.view);
         }
     }

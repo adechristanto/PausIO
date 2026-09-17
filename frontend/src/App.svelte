@@ -27,7 +27,9 @@
     DisplayTarget,
     HistoryEvent,
     Locale,
+    NotificationPermission,
     NudgeResult,
+    ReminderScheduleReport,
     Settings,
     SettingsProfiles,
     Snapshot,
@@ -82,6 +84,9 @@
   let watchStatus: WatchStatus | null = null
   let autostartStatus: AutostartStatus | null = null
   let nudgeResult: NudgeResult | null = null
+  // Phone-only: the standalone delivery path and the permission it needs.
+  let notificationPermission: NotificationPermission | null = null
+  let reminderPlan: ReminderScheduleReport | null = null
   let isUpdatingAutostart = false
   let diagnosticsOpen = false
   let announce = ''
@@ -124,8 +129,14 @@
   }
   const visibleSettingsCategories = () =>
     isMobileSettingsHost() ? mobileSettingsCategories : settingsCategories
+  // Only the callbacks live here. Values that change while the panel is open —
+  // a permission the person just granted, a replanned reminder schedule — are
+  // passed as direct template bindings instead, because a spread of a function
+  // call is evaluated once at mount and would leave the UI showing stale state.
   const wearableProps = () =>
-    isMobileWearableHost() ? { watchStatus, nudgeResult, syncWatchSettings, sendTestNudge } : {}
+    isMobileWearableHost()
+      ? { syncWatchSettings, sendTestNudge, requestNotificationPermission }
+      : {}
 
   // Draft text for the two free-form textareas. Kept separate from `settings` so that
   // typing (including Enter, trailing spaces, or a still-incomplete "12:") is never
@@ -378,10 +389,16 @@
         settings = next // never clobber a newer edit
       }
       if (isMobileWearableHost()) {
-        void api
-          .syncWatchSettings()
-          .then(refreshWatchStatus)
-          .catch(() => {})
+        // The Rust side rebuilds the phone's own reminder plan on every
+        // settings save; only re-read the resulting status here.
+        void refreshReminderPlan()
+        // A watch is opt-in: never push to one nobody connected.
+        if (next.watch_enabled) {
+          void api
+            .syncWatchSettings()
+            .then(refreshWatchStatus)
+            .catch(() => {})
+        }
       }
       saved = true
       clearTimeout(savedTimer)
@@ -403,9 +420,30 @@
   }
 
   async function refreshWatchStatus() {
-    if (!isMobileWearableHost()) return
+    // Nothing to report when no watch was ever connected, and asking would
+    // spin up the platform bridge for a feature nobody opted into.
+    if (!isMobileWearableHost() || !settings?.watch_enabled) return
     try {
       watchStatus = await api.getWatchStatus()
+    } catch (e) {
+      error = errorMessage(e)
+    }
+  }
+  /** Re-reads what the OS accepted of the phone's own reminder plan. */
+  async function refreshReminderPlan() {
+    if (!isMobileWearableHost()) return
+    try {
+      reminderPlan = await api.getReminderPlanStatus()
+      notificationPermission = await api.getNotificationPermission()
+    } catch {
+      // Diagnostics only; a failure here must never block the timer.
+    }
+  }
+  async function requestNotificationPermission() {
+    if (!isMobileWearableHost()) return
+    try {
+      notificationPermission = await api.requestNotificationPermission()
+      await refreshReminderPlan()
     } catch (e) {
       error = errorMessage(e)
     }
@@ -832,7 +870,12 @@
           } catch {
             // Best-effort; version just stays blank in Diagnostics.
           }
-          if (isMobileWearableHost()) await refreshWatchStatus()
+          if (isMobileWearableHost()) {
+            // The phone's own reminders come first: they are the delivery
+            // path that works with nothing paired.
+            await refreshReminderPlan()
+            await refreshWatchStatus()
+          }
         } else {
           const initial = await Promise.all([api.getState(), api.getSettings()])
           applyAppearance(initial[1])
@@ -858,7 +901,9 @@
           offHydrationNudge = await api.onHydrationNudge(
             () => (announce = t('nudge_hydration_announcement'))
           )
-          if (isMobileWearableHost()) {
+          // Repair a missed hand-off only for a watch someone connected.
+          // The Rust setup already re-registered the phone's own plan.
+          if (isMobileWearableHost() && settings?.watch_enabled) {
             await api.syncWatchSettings()
             await refreshWatchStatus()
           }
@@ -1264,6 +1309,10 @@
               {previewSystemSound}
               {setAutostart}
               {...wearableProps()}
+              {watchStatus}
+              {nudgeResult}
+              {notificationPermission}
+              {reminderPlan}
               {exportHealthReport}
               {resetLocalData}
               {profiles}

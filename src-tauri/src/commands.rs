@@ -2,7 +2,9 @@ use chrono::Local;
 use pausio_core::{EngineError, EngineEvent, Settings, Snapshot, TimerEngine};
 use pausio_protocol::{ContextReason, PauseReason};
 #[cfg(mobile)]
-use pausio_protocol::{NudgeResult, WatchSettingsEnvelopeV1, WatchStatus};
+use pausio_protocol::{
+    NudgeResult, ReminderScheduleReport, WatchPermissionState, WatchSettingsEnvelopeV1, WatchStatus,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
@@ -373,16 +375,30 @@ pub(crate) fn sync_watch_settings(
     let snapshot = guard.snapshot();
     let settings = guard.settings().clone();
     drop(guard);
+    // A watch is opt-in. Refusing here rather than silently succeeding keeps
+    // "not connected" from looking like a transport failure in the UI.
+    if !settings.watch_enabled {
+        return Err(platform_unavailable(
+            "connect a watch in Settings before syncing",
+        ));
+    }
     let envelope = crate::events::next_watch_settings_envelope(&app, &snapshot, &settings)?;
-    #[cfg(mobile)]
     crate::events::deliver_watch_settings(&app, &envelope)?;
     Ok(envelope)
 }
 
 #[cfg(mobile)]
 #[tauri::command]
-pub(crate) fn send_test_nudge(app: AppHandle) -> ApiResult<NudgeResult> {
+pub(crate) fn send_test_nudge(
+    app: AppHandle,
+    engine: State<'_, EngineState>,
+) -> ApiResult<NudgeResult> {
     use tauri_plugin_eyecare::EyecareExt;
+    if !lock_engine(&engine.0).settings().watch_enabled {
+        return Err(platform_unavailable(
+            "connect a watch in Settings before sending a test",
+        ));
+    }
     app.eyecare()
         .send_test_nudge()
         .map_err(platform_unavailable)
@@ -393,6 +409,72 @@ pub(crate) fn send_test_nudge(app: AppHandle) -> ApiResult<NudgeResult> {
 pub(crate) fn get_watch_status(app: AppHandle) -> ApiResult<WatchStatus> {
     use tauri_plugin_eyecare::EyecareExt;
     app.eyecare().status().map_err(platform_unavailable)
+}
+
+/// The OS notification permission for this phone's own reminders.
+///
+/// Distinct from the watch's permission: with the phone standalone, a denial
+/// here means no break is announced at all.
+#[cfg(mobile)]
+#[tauri::command]
+pub(crate) fn get_notification_permission(app: AppHandle) -> ApiResult<WatchPermissionState> {
+    use tauri_plugin_eyecare::EyecareExt;
+    app.eyecare()
+        .local_notification_permission()
+        .map_err(platform_unavailable)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+pub(crate) fn request_notification_permission(app: AppHandle) -> ApiResult<WatchPermissionState> {
+    use tauri_plugin_eyecare::EyecareExt;
+    app.eyecare()
+        .request_local_notification_permission()
+        .map_err(platform_unavailable)
+}
+
+/// Re-registers the phone's reminder plan and reports what the OS accepted.
+///
+/// Returning the report rather than `()` is what lets the settings panel say
+/// that reminders are degraded — truncated by the iOS pending limit, or
+/// downgraded to inexact alarms — instead of a person discovering it when a
+/// break fails to arrive.
+#[cfg(mobile)]
+#[tauri::command]
+pub(crate) fn get_reminder_plan_status(
+    app: AppHandle,
+    engine: State<'_, EngineState>,
+) -> ApiResult<ReminderScheduleReport> {
+    use tauri_plugin_eyecare::EyecareExt;
+
+    let guard = lock_engine(&engine.0);
+    let view = crate::state::EngineView::capture(&guard);
+    drop(guard);
+    if !view.settings.alert_target.alerts_on_phone() {
+        app.eyecare()
+            .cancel_local_reminders()
+            .map_err(platform_unavailable)?;
+        return Ok(ReminderScheduleReport::default());
+    }
+    let now = chrono::Utc::now();
+    let deadline = match &view.snapshot.phase {
+        pausio_protocol::TimerPhase::Working
+        | pausio_protocol::TimerPhase::PreBreak
+        | pausio_protocol::TimerPhase::Breaking { .. } => {
+            Some(now + chrono::Duration::seconds(view.snapshot.remaining_seconds.into()))
+        }
+        _ => None,
+    };
+    let slots = pausio_core::reminder_plan(
+        &view.settings,
+        &view.snapshot.phase,
+        deadline,
+        now,
+        crate::events::reminder_plan_limit(),
+    );
+    app.eyecare()
+        .schedule_local_reminders(&slots)
+        .map_err(platform_unavailable)
 }
 
 #[tauri::command]
@@ -491,10 +573,32 @@ pub(crate) fn get_desktop_health(
     #[cfg(not(desktop))]
     {
         let settings = lock_engine(&engine.0).settings().clone();
+        // Report the phone's real permission. It used to be hardcoded
+        // "unavailable", which was accurate when the phone posted nothing at
+        // all, but now hides the one failure that silences a standalone
+        // install entirely.
+        #[cfg(mobile)]
+        let notification_permission = {
+            use tauri_plugin_eyecare::EyecareExt;
+            app.eyecare()
+                .local_notification_permission()
+                .map(|state| {
+                    serde_json::to_value(state)
+                        .ok()
+                        .and_then(|value| value.as_str().map(str::to_owned))
+                        .unwrap_or_else(|| "unknown".into())
+                })
+                .unwrap_or_else(|_| "unknown".into())
+        };
+        #[cfg(not(mobile))]
+        let notification_permission = {
+            let _ = &app;
+            String::from("unavailable")
+        };
         let _ = app;
         Ok(DesktopHealth {
             platform: std::env::consts::OS.into(),
-            notification_permission: "unavailable".into(),
+            notification_permission,
             display_count: 0,
             autostart_supported: false,
             autostart_enabled: false,
@@ -545,7 +649,23 @@ pub(crate) fn test_reminder(app: AppHandle, engine: State<'_, EngineState>) -> A
         )
         .map_err(internal_error)
     }
-    #[cfg(not(desktop))]
+    // A phone must be able to prove its own delivery works, since a
+    // standalone install has no wearable to fall back on. This used to be a
+    // silent no-op, which made a broken setup indistinguishable from a
+    // working one.
+    #[cfg(mobile)]
+    {
+        use tauri_plugin_eyecare::EyecareExt;
+        let _ = engine;
+        match app.eyecare().post_test_reminder() {
+            Ok(pausio_protocol::NudgeResult::Unavailable) => Err(internal_error(
+                "notifications are not permitted, so breaks cannot be announced",
+            )),
+            Ok(_) => Ok(()),
+            Err(error) => Err(platform_unavailable(error)),
+        }
+    }
+    #[cfg(all(not(desktop), not(mobile)))]
     {
         let _ = (app, engine);
         Ok(())

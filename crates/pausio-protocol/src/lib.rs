@@ -237,6 +237,76 @@ pub enum NudgeResult {
     Unavailable,
 }
 
+/// Which moment a locally scheduled phone reminder represents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReminderKind {
+    /// The advance warning fired `pre_break_seconds` before a break is due.
+    PreBreak,
+    /// The moment the break itself becomes due.
+    BreakDue,
+}
+
+/// One pre-computed reminder instant handed to a native scheduler.
+///
+/// The phone derives these from its own engine state and settings, then the
+/// platform layer registers them with `UNUserNotificationCenter` (iOS) or
+/// `AlarmManager` (Android). They carry an absolute instant and nothing else:
+/// no activity, no application name, and no content of any kind. This is what
+/// lets a phone alert on its own while suspended, with no paired wearable and
+/// no network.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReminderSlot {
+    pub at: DateTime<Utc>,
+    pub kind: ReminderKind,
+}
+
+/// What a native scheduler actually managed to register.
+///
+/// `scheduled` may be lower than the number of slots supplied: iOS silently
+/// discards pending notifications beyond 64, and Android may downgrade to
+/// inexact alarms. Reporting both honestly is what lets the settings UI warn
+/// a person that standalone reminders are degraded instead of failing quietly.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReminderScheduleReport {
+    pub scheduled: u32,
+    #[serde(default)]
+    pub horizon_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub precision: Option<WatchReminderPrecision>,
+    #[serde(default)]
+    pub permission: Option<WatchPermissionState>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+/// Where a break should actually announce itself.
+///
+/// Defaults to [`AlertTarget::Phone`] so an unpaired phone is useful on its
+/// own. `Watch` is not a silent optimisation: it is the deliberate choice to
+/// receive a private wrist haptic instead of a banner on a screen that may be
+/// shared, so the phone stays quiet even when a watch is out of range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertTarget {
+    #[default]
+    Phone,
+    Watch,
+    Both,
+}
+
+impl AlertTarget {
+    /// Whether the phone should schedule and post its own reminders.
+    pub fn alerts_on_phone(self) -> bool {
+        matches!(self, AlertTarget::Phone | AlertTarget::Both)
+    }
+
+    /// Whether a connected watch should be driven for break delivery.
+    pub fn alerts_on_watch(self) -> bool {
+        matches!(self, AlertTarget::Watch | AlertTarget::Both)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WatchStatus {
     pub platform: String,

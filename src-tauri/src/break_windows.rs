@@ -426,6 +426,7 @@ pub(crate) fn show_break_overlays(
         harden_break_overlay(&window);
 
         let guarded = window.clone();
+        let app_for_teardown = app.clone();
         window.on_window_event(move |event| match event {
             // Alt+F4, Cmd+W and any other user-initiated close request. Engine-driven
             // teardown goes through `destroy`, which never reaches this handler.
@@ -439,6 +440,22 @@ pub(crate) fn show_break_overlays(
             tauri::WindowEvent::Focused(false) => {
                 if OVERLAY_GENERATION.load(Ordering::SeqCst) == generation {
                     harden_break_overlay(&guarded);
+                }
+            }
+            // The shield is gone for real — not merely queued for teardown.
+            //
+            // `destroy` only *enqueues* the native teardown, so the
+            // `hide_main_window` inside `close_break_overlays` runs while this
+            // overlay is still alive and still holds key status. When AppKit
+            // finally tears it down it activates the next window in the
+            // application, which is the main one, undoing that hide and leaving
+            // a dashboard on screen that the person had tucked into the menu
+            // bar. Re-asserting here is the only point that is ordered *after*
+            // the activation. Strictly gated on the flag, so a dashboard that
+            // was deliberately open before the break stays open.
+            tauri::WindowEvent::Destroyed => {
+                if !MAIN_WINDOW_VISIBLE.load(Ordering::Relaxed) {
+                    hide_main_window(&app_for_teardown);
                 }
             }
             // Resolution or scale change mid-break: re-cover the monitor.

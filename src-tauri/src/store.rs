@@ -14,6 +14,13 @@ pub(crate) const HISTORY_LIMIT: usize = 50_000;
 pub(crate) const SETTINGS_PROFILES_KEY: &str = "settings_profiles";
 pub(crate) const ONBOARDING_KEY: &str = "onboarding";
 
+/// Store keys that only ever belong to a phone talking to a wearable.
+///
+/// Desktop never connects to a watch, but earlier desktop builds wrote these
+/// anyway while reporting no watch support, so launch purges them. Naming them
+/// once keeps the purge and its regression test from drifting apart.
+pub(crate) const WATCH_ONLY_KEYS: [&str; 2] = ["watch_revision", "watch_last_envelope"];
+
 static HISTORY_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Two deliberately simple local presets. They are settings snapshots, not
@@ -426,6 +433,27 @@ mod tests {
 
         assert_eq!(started, completed);
         assert!(current.is_none());
+    }
+
+    /// The desktop purge in `run()` iterates `WATCH_ONLY_KEYS`, so these are
+    /// the exact keys a desktop store is guaranteed not to retain. Serialized
+    /// desktop settings must also never contain them.
+    #[test]
+    fn watch_only_keys_are_never_part_of_desktop_settings() {
+        let serialized =
+            serde_json::to_value(pausio_core::Settings::default()).expect("serialize settings");
+        let object = serialized.as_object().expect("settings serialize to a map");
+        for key in super::WATCH_ONLY_KEYS {
+            assert!(
+                !object.contains_key(key),
+                "{key} is watch transport state and must never live in settings"
+            );
+        }
+        assert_eq!(
+            super::WATCH_ONLY_KEYS,
+            ["watch_revision", "watch_last_envelope"],
+            "changing these names requires updating the desktop purge in run()"
+        );
     }
 
     #[test]

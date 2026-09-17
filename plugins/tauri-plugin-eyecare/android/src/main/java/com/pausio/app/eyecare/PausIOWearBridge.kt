@@ -1,7 +1,9 @@
 package com.pausio.app.eyecare
 
+import android.Manifest
 import android.content.Context
 import android.app.Activity
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import app.tauri.annotation.Command
@@ -243,5 +245,54 @@ class PausIOEyecarePlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun takePendingAction(invoke: Invoke) {
         invoke.resolveObject(PausIOWearRuntimeActions.take(activity) ?: "")
+    }
+
+    // Standalone phone reminders. Independent of the watch bridge above: these
+    // are what let an Android phone announce breaks on its own, while dozing,
+    // with nothing paired.
+
+    @Command
+    fun scheduleLocalReminders(invoke: Invoke) {
+        val slots = runCatching {
+            JSONObject(invoke.getRawArgs()).optJSONArray("slots") ?: JSONArray()
+        }.getOrDefault(JSONArray())
+        invoke.resolveObject(PausIOPhoneReminders.replace(activity, slots).toString())
+    }
+
+    @Command
+    fun cancelLocalReminders(invoke: Invoke) {
+        PausIOPhoneReminders.clear(activity)
+        invoke.resolve()
+    }
+
+    @Command
+    fun localNotificationPermission(invoke: Invoke) {
+        invoke.resolveObject(PausIOPhoneReminders.permissionState(activity))
+    }
+
+    @Command
+    fun requestLocalNotificationPermission(invoke: Invoke) {
+        if (PausIOPhoneReminders.notificationsAllowed(activity)) {
+            invoke.resolveObject("granted")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // The result arrives on the activity, not here; the settings panel
+            // re-reads the state when it regains focus.
+            activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9_101)
+            invoke.resolveObject("not_determined")
+            return
+        }
+        invoke.resolveObject("denied")
+    }
+
+    @Command
+    fun postTestReminder(invoke: Invoke) {
+        if (!PausIOPhoneReminders.notificationsAllowed(activity)) {
+            invoke.resolveObject("unavailable")
+            return
+        }
+        PausIOPhoneReminders.postReminder(activity, isPreBreak = false)
+        invoke.resolveObject("delivered")
     }
 }

@@ -11,6 +11,10 @@ export type SoundTiming = 'banner' | 'end' | 'both' | 'silent'
 export type SystemSound = 'default' | 'chime' | 'ding' | 'alert' | 'complete'
 export type ContextReason =
   'meeting' | 'screen_share' | 'fullscreen' | 'do_not_disturb' | 'active_input'
+/** Where a break announces itself on a phone. `watch` keeps the phone silent
+ * deliberately, so the reminder stays private on a screen that may be shared. */
+export type AlertTarget = 'phone' | 'watch' | 'both'
+export type NotificationPermission = 'unknown' | 'not_determined' | 'granted' | 'denied'
 export type TimerPhase =
   | 'dormant'
   | 'working'
@@ -51,6 +55,12 @@ export interface Settings {
   auto_detect_do_not_disturb?: boolean
   hydration_nudge_minutes?: number | null
   show_clock_in_break?: boolean
+  /** Phone only. Where a break announces itself; defaults to the phone so a
+   * new install works with nothing paired. Desktop ignores this. */
+  alert_target?: AlertTarget
+  /** Phone only. Whether a wearable is connected at all. Off until someone
+   * opts in, so an unconnected watch costs nothing. */
+  watch_enabled?: boolean
 }
 export interface Snapshot {
   phase: TimerPhase
@@ -141,6 +151,20 @@ export interface WatchStatus {
     standalone?: boolean
     complication?: boolean
   }
+}
+
+/** What the OS actually accepted of the phone's reminder plan.
+ *
+ * `scheduled` can be lower than the plan: iOS silently drops pending
+ * notifications past 64, and Android may downgrade to inexact alarms. The
+ * settings panel reports this so degraded delivery is visible rather than
+ * discovered when a break fails to arrive. */
+export interface ReminderScheduleReport {
+  scheduled: number
+  horizon_at?: string | null
+  precision?: 'exact' | 'inexact' | 'not_available' | null
+  permission?: NotificationPermission | null
+  last_error?: string | null
 }
 
 export interface AutostartStatus {
