@@ -19,6 +19,7 @@
   let startButton: HTMLButtonElement | undefined
   let pauseTrigger = $state<HTMLButtonElement>()
   let pauseMenuEl = $state<HTMLElement>()
+  let promptActionsEl = $state<HTMLElement>()
   let pauseMenuOpen = $state(false)
 
   const dueKind = (value: Snapshot | null): BreakKind => {
@@ -74,15 +75,16 @@
 
   // This window never takes keyboard focus on its own — it is persistent and
   // appears in the corner without activating, so it cannot steal the caret
-  // mid-sentence. Keys can only reach it after a deliberate click, and even
-  // then we block keyboard input while it is open: auto-focusing the "Start"
-  // button would let a stray keypress (e.g. Space/Enter) start the
-  // break/pause before the user intended. The "Pause for…" dropdown, once
-  // opened via mouse, still needs its own Escape/ArrowUp/ArrowDown handling
-  // (onMenuKeydown) to be usable, so we don't swallow keys while that menu
-  // is open.
+  // mid-sentence. Nothing is auto-focused, so a stray keypress (e.g.
+  // Space/Enter) before a person has deliberately interacted cannot start
+  // the break/pause. Tab is always allowed through so keyboard-only users can
+  // reach the controls at all; once focus has moved onto one of this
+  // window's own buttons, every key reaches it normally so Enter/Space and
+  // arrow-key menu navigation (onMenuKeydown) work as expected.
   const blockKeyboard = (event: KeyboardEvent) => {
-    if (pauseMenuOpen) return
+    if (pauseMenuOpen || event.key === 'Tab') return
+    const active = document.activeElement
+    if (active instanceof Node && promptActionsEl?.contains(active)) return
     event.preventDefault()
     event.stopPropagation()
   }
@@ -110,7 +112,7 @@
     </div>
     <h1>{t('break_due_heading')}</h1>
     {#if error}<p class="window-error" role="alert">{error}</p>{/if}
-    <div class="prompt-actions">
+    <div class="prompt-actions" bind:this={promptActionsEl}>
       <button class="button button-primary" bind:this={startButton} onclick={onStart}
         >{breakLabel()}</button
       >

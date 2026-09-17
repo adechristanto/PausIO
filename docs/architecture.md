@@ -15,15 +15,25 @@ PausIO/
 │   └── tauri-plugin-eyecare/ # Rust + Swift (iOS) + Kotlin (Android) watch bridge
 ├── src-tauri/                # Tauri v2 desktop application shell
 │   └── src/
-│       ├── lib.rs            # Application logic (state, commands, platform, tray)
-│       ├── i18n.rs           # English/German string catalogue
-│       ├── session_monitor.rs# macOS/Windows session lock monitoring
-│       └── tray_icon.rs      # SVG tray icon renderer
+│       ├── lib.rs             # Setup, tick loop, shared state wiring
+│       ├── commands.rs        # #[tauri::command] handlers (the IPC surface)
+│       ├── state.rs           # EngineState, EngineView, lock_engine, publish/drain_and_emit
+│       ├── store.rs           # tauri-plugin-store persistence (settings, session, history)
+│       ├── events.rs          # emit/emit_tick, reminder-plan refresh, watch envelope build
+│       ├── break_windows.rs   # Break prompt/overlay window lifecycle
+│       ├── main_window.rs     # Main window show/hide/lifecycle
+│       ├── tray_menu.rs       # Tray menu construction and state sync
+│       ├── tray_icon.rs       # SVG tray icon renderer
+│       ├── session_monitor.rs # macOS/Windows instantaneous lock/unlock events
+│       ├── sound_player.rs    # Break sound cue playback
+│       ├── mac_notify.rs      # macOS notification authorization
+│       ├── i18n.rs            # English/German string catalogue
+│       └── platform/          # Per-OS idle/context/session adapters (macos, windows, linux)
 ├── frontend/
 │   └── src/
 │       ├── App.svelte         # Root component (settings, history, timer display)
 │       ├── components/        # BreakOverlay, BreakPrompt, TimerRing, …
-│       └── lib/               # errors, format, i18n, pausio, sound, types, …
+│       └── lib/               # errors, format, i18n, pausio, types, …
 ├── watch/
 │   ├── apple-watch/          # SwiftPM package — watchOS companion
 │   └── wear-os/              # Gradle project — Wear OS companion
@@ -38,7 +48,7 @@ PausIO/
 
 ### `crates/pausio-core` — timer engine
 
-The engine is a pure-Rust state machine with no dependency on Tauri, webviews, or any UI. Its public API surface is about 16 items: `TimerEngine`, `Settings`, `Snapshot`, `SessionCheckpoint`, `EngineEvent`, `EngineError`, and the presentational enums (`Locale`, `Strictness`, `Theme`, `Accent`, `DisplayTarget`, `BreakRoutine`, `SoundTheme`). All live in `crates/pausio-core/src/lib.rs` (a single file; no subdirectory).
+The engine is a pure-Rust state machine with no dependency on Tauri, webviews, or any UI. Its public API surface is about 16 items: `TimerEngine`, `Settings`, `Snapshot`, `SessionCheckpoint`, `EngineEvent`, `EngineError`, and the presentational enums (`Locale`, `Strictness`, `Theme`, `Accent`, `DisplayTarget`, `BreakRoutine`, `SoundTheme`). The crate is split across `lib.rs` (public surface and re-exports), `engine.rs` (the `TimerEngine` state machine), `settings.rs` (`Settings` and validation), `types.rs` (`Snapshot`, `SessionCheckpoint`, and other plain data types), and `reminders.rs` (the phone's standalone reminder-plan projection, see "Standalone operation" below).
 
 The engine is the only component covered by the 90% line-coverage gate (`cargo llvm-cov -p pausio-core --lib --fail-under-lines 90`). Its determinism is the foundation the rest of the stack relies on.
 
@@ -94,24 +104,23 @@ The plugin is linked only into iOS and Android hosts. Desktop builds do not cont
 
 ### `src-tauri` — desktop shell
 
-The Tauri desktop shell lives in `src-tauri/src/lib.rs`. It holds:
+The Tauri desktop shell is split across several modules under `src-tauri/src/`:
 
-- **Shared state types**: `EngineState` (a `Mutex<TimerEngine>`), `SessionLockState`, `HistoryTracker`, `EngineView`, `PUBLISHER`.
-- **Error types**: `ApiError`, `ApiResult`.
-- **Store persistence**: `persist_settings`, `persist_session`, `append_history`, and helpers for two store files (`pausio-settings.json`, `pausio-history.json`). History lives in its own store so frequent session heartbeats (every 30 s) never rewrite the larger history array.
-- **Mobile watch sync**: `next_watch_settings_envelope`, `deliver_watch_settings`, `sync_watch_state`; these paths compile only for iOS and Android hosts.
-- **Event emission**: `emit`, `emit_tick`. Tick events are skipped for hidden windows to avoid waking every webview every second.
-- **Platform adapters** (guarded by `#[cfg]`):
+- **`lib.rs`**: the `run()` builder — assembles plugins, managed state, the `setup` closure (store migrations, tray/menu/window bring-up, publisher install, restored-session reconciliation), and the 1 s tick loop.
+- **`state.rs`**: `EngineState` (a `Mutex<TimerEngine>`), `SessionLockState`, `HistoryTracker`, `EngineView`, `PUBLISHER`, `lock_engine`, `publish`/`drain_and_emit`, `ApiError`/`ApiResult`.
+- **`store.rs`**: `persist_settings`, `persist_session`, `append_history`, and helpers for two store files (`pausio-settings.json`, `pausio-history.json`). History lives in its own store so frequent session heartbeats (every 30 s) never rewrite the larger history array.
+- **`commands.rs`**: the `#[tauri::command]` handlers wired in `lib.rs::run()` via `generate_handler!` — the IPC surface the frontend calls.
+- **`events.rs`**: `emit`, `emit_tick` (skipped for hidden windows to avoid waking every webview every second), and the mobile-only reminder-plan/watch-envelope paths (`next_watch_settings_envelope`, `deliver_watch_settings`, `refresh_reminder_plan`) that compile only for iOS and Android hosts.
+- **`platform/`** (guarded by per-file `#[cfg(target_os = ...)]`, one module per OS):
   - `platform_idle_seconds()` — macOS: `CGEventSourceSecondsSinceLastEventType`; Linux: `loginctl show-session` polled at 10 s intervals via `LOGINCTL_CACHE`; Windows: `GetLastInputInfo`.
-  - `platform_context_signal()` — Windows only: `SHQueryUserNotificationState`.
+  - `platform_context_signal()` — Windows: `SHQueryUserNotificationState` (Focus Assist / Do Not Disturb); macOS: `CGWindowListCopyWindowInfo` (fullscreen only — Focus/DND has no public, permission-free API on macOS and is reported as unsupported rather than silently no-oping); Linux: not implemented.
   - `platform_session_locked()` — Linux only via the `loginctl` cache.
   - `sync_linux_session_lock()` — polls the cache each tick, fires `handle_session_event` on edge transitions.
-- **Break windows**: `show_break_prompt`, `show_break_overlays`, `close_break_prompt`, `close_break_overlays`, `close_break_windows`. The overlay is hardened platform-specifically: `NSScreenSaverWindowLevel` on macOS, `HWND_TOPMOST + MarkFullscreenWindow` on Windows. `OVERLAY_GENERATION` is bumped on each teardown so the `spawn_overlay_watchdog` can detect stale breaks.
-- **Main window / tray**: `show_main_window`, `hide_main_window`, `install_main_window_lifecycle`, `push_state_resync`.
-- **Tray menu**: `build_tray`, `update_tray_state`, `retranslate_tray`, `TrayMenuItems`, `TRAY_MENU_ITEMS`, `TRAY_ICON`. Distinct from `tray_icon.rs`, which handles the SVG icon itself.
-- **App menu** (macOS only): `build_app_menu`, `QUIT_MENU_ITEM`. A custom macOS menu keeps standard App/Edit/Window submenus while replacing the Quit item so `set_quit_enabled` can block `Cmd+Q` during a non-dismissible break.
-- **Commands**: 30 `#[tauri::command]` handlers wired in `run()` via `generate_handler!`.
-- **`run()`**: 430-line builder assembling plugins, managed state, setup closure, and tick loop.
+- **`break_windows.rs`**: `show_break_prompt`, `show_break_overlays`, `close_break_prompt`, `close_break_overlays`, `close_break_windows`. The overlay is hardened platform-specifically: `NSScreenSaverWindowLevel` on macOS, `HWND_TOPMOST + MarkFullscreenWindow` on Windows. `OVERLAY_GENERATION` is bumped on each teardown so the `spawn_overlay_watchdog` can detect stale breaks.
+- **`main_window.rs`**: `show_main_window`, `hide_main_window`, `install_main_window_lifecycle`, `push_state_resync`.
+- **`tray_menu.rs`**: `build_tray`, `update_tray_state`, `retranslate_tray`, `TrayMenuItems`, `TRAY_MENU_ITEMS`, `TRAY_ICON`. Distinct from `tray_icon.rs`, which handles the SVG icon itself.
+- **App menu** (macOS only, in `lib.rs`): `build_app_menu`, `QUIT_MENU_ITEM`. A custom macOS menu keeps standard App/Edit/Window submenus while replacing the Quit item so `set_quit_enabled` can block `Cmd+Q` during a non-dismissible break.
+- **`sound_player.rs`**: break sound cue playback. **`mac_notify.rs`**: macOS notification authorization, installed at launch.
 
 The concurrency invariant is documented on `EngineView` in `state.rs` and enforced by the `EngineView` / `publish` / publisher-thread pattern: the engine mutex is never held across any `emit`, tray mutation, or window create/close call, because those dispatch to — and can block on — the main event loop, while several commands run on that same loop and call `lock_engine` themselves.
 
@@ -123,7 +132,7 @@ Publication is funnelled through a single dedicated thread (`state::install_publ
 
 Countdown-only batches that a newer batch has already superseded are dropped rather than replayed, so a publisher that falls behind catches up instead of lagging further. The 30-second session-checkpoint heartbeat also lives on this thread, making it the only writer of that key.
 
-Module files left untouched by the architecture split:
+Two further modules round out the desktop shell:
 
 - `i18n.rs` — English/German compile-time string catalogue keyed on `Locale`.
 - `session_monitor.rs` — macOS `NSWorkspace` notifications and Windows `WTSRegisterSessionNotification` for instantaneous lock/unlock events.
@@ -140,7 +149,7 @@ Key frontend modules:
 - `src/lib/types.ts` — TypeScript types mirroring the Rust `Snapshot`, `Settings`, `HistoryEvent`, etc.
 - `src/lib/pausio.ts` — Tauri command wrappers and event subscriptions.
 - `src/lib/i18n.ts` — Frontend i18n catalogue (matches `src-tauri/src/i18n.rs`).
-- `src/lib/errors.ts`, `format.ts`, `history-analytics.ts`, `sound.ts`, `tooltip.ts` — utilities.
+- `src/lib/errors.ts`, `format.ts`, `history-analytics.ts`, `tooltip.ts` — utilities. Break sound playback is entirely Rust-side (`src-tauri/src/sound_player.rs`); the frontend only sends a play-preview command.
 - `src/components/` — `BreakOverlay.svelte`, `BreakPrompt.svelte`, `TimerRing.svelte`, `ShortcutField.svelte`, `SettingsPanel.svelte`, `HistoryPanel.svelte`, `Onboarding.svelte`, `NudgeToast.svelte`, `Advanced.svelte`.
 
 ### Standalone operation
@@ -202,7 +211,7 @@ PausIO uses `tauri-plugin-store` for all local persistence. Two store files are 
 | File                   | Contents                                                                                                                                                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `pausio-settings.json` | `settings` (serialized `Settings`), `session` (serialized `SessionCheckpoint`), `settings_profiles` (work/home snapshots); mobile hosts additionally keep `watch_revision` (monotonic u64) and the latest watch envelope |
-| `pausio-history.json`  | `history` (array of `HistoryEvent`, capped at 5,000 entries)                                                                                                                                                             |
+| `pausio-history.json`  | `history` (array of `HistoryEvent`, capped at `HISTORY_LIMIT` = 50,000 entries)                                                                                                                                          |
 
 In E2E mode (`--e2e`), both stores are prefixed with `pausio-e2e-` and the session checkpoint is not restored, giving each test run a deterministic start.
 
@@ -250,11 +259,11 @@ The engine never inspects application names, window titles, screen contents, aud
 
 Tracked openly; each entry names what is blocking it.
 
-| Item                                                                                      | Status                    | Blocker                                                                                                                                                                                                                      |
-| ----------------------------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Signed distribution (macOS Developer ID + notarization, Windows code signing)             | Blocked                   | Requires Apple Developer Program membership and a Windows code-signing certificate. See `docs/RELEASE_PIPELINE.md`.                                                                                                          |
-| Linux/Wayland idle and lock parity                                                        | Not implemented           | X11-era `loginctl` polling covers only part of the Wayland landscape; per-compositor protocols (`ext-idle-notify`, D-Bus ScreenSaver) need design. See `docs/LINUX_WAYLAND_PLAN.md`.                                         |
-| Watch battery targets unvalidated                                                         | Blocked                   | Requires sustained on-hardware measurement on Apple Watch and Wear OS devices.                                                                                                                                               |
-| Unmaintained transitive dependencies (GTK3 via Tauri/Linux, `unic-*`, `proc-macro-error`) | Accepted risk, documented | Maintenance-status advisories only, no known vulnerabilities. Each RUSTSEC ID is listed with justification in `deny.toml`; cargo-deny re-checks weekly in CI. Revisit when Tauri migrates off GTK3 / urlpattern.             |
-| macOS automatic context detection (fullscreen / Focus)                                    | Not implemented           | Needs either Accessibility permission or CoreGraphics window-list traversal; Focus state via `Assertions.json` false-positives. Reported honestly as unsupported in the desktop health report rather than silently no-oping. |
-| Linux automatic context detection                                                         | Not implemented           | No portable, permission-free signal across X11/Wayland and GNOME/KDE/wlroots. Same honest-unsupported reporting as macOS.                                                                                                    |
+| Item                                                                                      | Status                    | Blocker                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Signed distribution (macOS Developer ID + notarization, Windows code signing)             | Blocked                   | Requires Apple Developer Program membership and a Windows code-signing certificate. See `docs/RELEASE_PIPELINE.md`.                                                                                                                                                                                                        |
+| Linux/Wayland idle and lock parity                                                        | Not implemented           | X11-era `loginctl` polling covers only part of the Wayland landscape; per-compositor protocols (`ext-idle-notify`, D-Bus ScreenSaver) need design. See `docs/LINUX_WAYLAND_PLAN.md`.                                                                                                                                       |
+| Watch battery targets unvalidated                                                         | Blocked                   | Requires sustained on-hardware measurement on Apple Watch and Wear OS devices.                                                                                                                                                                                                                                             |
+| Unmaintained transitive dependencies (GTK3 via Tauri/Linux, `unic-*`, `proc-macro-error`) | Accepted risk, documented | Maintenance-status advisories only, no known vulnerabilities. Each RUSTSEC ID is listed with justification in `deny.toml`; cargo-deny re-checks weekly in CI. Revisit when Tauri migrates off GTK3 / urlpattern.                                                                                                           |
+| macOS automatic Focus/Do Not Disturb detection                                            | Not implemented           | No public, permission-free API on modern macOS; the unofficial `Assertions.json` route is known to false-positive. Reported honestly as unsupported (`auto_context_dnd_supported: false`) rather than silently no-oping. Fullscreen detection _is_ implemented via `CGWindowListCopyWindowInfo` — see `platform/macos.rs`. |
+| Linux automatic context detection                                                         | Not implemented           | No portable, permission-free signal across X11/Wayland and GNOME/KDE/wlroots. Same honest-unsupported reporting as macOS.                                                                                                                                                                                                  |
