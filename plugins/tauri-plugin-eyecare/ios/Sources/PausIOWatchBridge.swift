@@ -1,5 +1,6 @@
 import Foundation
 import Tauri
+import UserNotifications
 import WatchConnectivity
 
 enum WatchPhase: Codable {
@@ -263,6 +264,27 @@ final class PausIOWatchBridge: NSObject, WCSessionDelegate {
         return pendingActions.removeFirst()
     }
 
+    /// Queues an action originating on this phone — a button on one of its own
+    /// reminder notifications — rather than from a watch.
+    ///
+    /// It joins the same queue the Rust tick loop drains, so phone and watch
+    /// controls converge on one code path. No receipt is sent: there is no
+    /// remote peer to acknowledge, and emitting one would tell a connected
+    /// watch that it originated an action it never took.
+    func enqueueLocalAction(_ action: String) {
+        guard supportedActions.contains(action) else { return }
+        let runtime = WatchRuntimeActionMessage(
+            schemaVersion: 1,
+            actionID: UUID().uuidString,
+            action: action,
+            baseRevision: UserDefaults.standard.object(forKey: "pausio.last_synced_revision") as? UInt64 ?? 0,
+            occurredAt: ISO8601DateFormatter().string(from: Date())
+        )
+        guard let data = try? JSONEncoder().encode(runtime),
+              let raw = String(data: data, encoding: .utf8) else { return }
+        actionLock.lock(); pendingActions.append(raw); actionLock.unlock()
+    }
+
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         if let error {
             setLastError(error.localizedDescription)
@@ -433,10 +455,85 @@ final class PausIOEyecarePlugin: Plugin {
     @objc func takePendingAction(_ invoke: Invoke) {
         invoke.resolve(PausIOWatchBridge.shared.takePendingAction() ?? "")
     }
+
+    // MARK: - Standalone phone reminders
+    //
+    // These are independent of the watch bridge above: they are what lets an
+    // iPhone announce breaks on its own, while suspended, with nothing paired.
+
+    @objc func scheduleLocalReminders(_ invoke: Invoke) throws {
+        let request = try invoke.parseArgs(PausIOReminderPlanRequest.self)
+        PausIOLocalReminders.replace(with: request.slots) { report in
+            invoke.resolve(report)
+        }
+    }
+
+    @objc func cancelLocalReminders(_ invoke: Invoke) {
+        PausIOLocalReminders.replace(with: []) { _ in invoke.resolve() }
+    }
+
+    @objc func localNotificationPermission(_ invoke: Invoke) {
+        PausIOLocalReminders.permissionState { state in invoke.resolve(state) }
+    }
+
+    @objc func requestLocalNotificationPermission(_ invoke: Invoke) {
+        PausIOLocalReminders.requestPermission { state in invoke.resolve(state) }
+    }
+
+    @objc func postTestReminder(_ invoke: Invoke) {
+        PausIOLocalReminders.postTest { result in invoke.resolve(result) }
+    }
+}
+
+/// Turns a tap on a reminder's action button into a runtime action the Rust
+/// tick loop already knows how to drain, so the phone's own notifications get
+/// the same controls the watch has.
+final class PausIOReminderActionHandler: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = PausIOReminderActionHandler()
+
+    func install() {
+        UNUserNotificationCenter.current().delegate = self
+        PausIOLocalReminders.registerCategories()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // A break is worth showing even with PausIO in the foreground: the
+        // person may be looking at another part of the app. `.banner`
+        // supersedes `.alert` in iOS 14, but `.alert` remains the only
+        // spelling available below it.
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .sound])
+        } else {
+            completionHandler([.alert, .sound])
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let action: String? = switch response.actionIdentifier {
+        case PausIOLocalReminders.startBreakAction: "take_break_now"
+        case PausIOLocalReminders.pauseAction: "pause"
+        default: nil
+        }
+        if let action {
+            PausIOWatchBridge.shared.enqueueLocalAction(action)
+        }
+        completionHandler()
+    }
 }
 
 @_cdecl("init_plugin_eyecare")
 func initPluginEyecare() -> Plugin {
     PausIOWatchBridge.shared.activate()
+    // Installed unconditionally: local reminders are the phone's own delivery
+    // path and must work whether or not a watch is ever connected.
+    PausIOReminderActionHandler.shared.install()
     return PausIOEyecarePlugin()
 }

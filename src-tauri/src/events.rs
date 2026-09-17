@@ -1,8 +1,5 @@
 use pausio_core::EngineEvent;
-#[cfg(desktop)]
 use pausio_core::{Settings, SystemSound};
-#[cfg(desktop)]
-use pausio_protocol::BreakKind;
 #[cfg(mobile)]
 use pausio_protocol::{WatchPhase, WatchSettingsEnvelopeV1};
 #[cfg(desktop)]
@@ -131,11 +128,72 @@ pub(crate) fn deliver_watch_settings(
 }
 
 /// State changes are sent as a new revision; timer ticks are deliberately not.
+///
+/// A watch is optional, so this is a no-op until someone connects one in
+/// Settings. Nothing is transported to a wearable a person never asked for.
 #[cfg(mobile)]
 pub(crate) fn sync_watch_state(app: &AppHandle, view: &EngineView) {
+    if !view.settings.watch_enabled {
+        return;
+    }
     if let Ok(envelope) = next_watch_settings_envelope(app, &view.snapshot, &view.settings) {
         let _ = deliver_watch_settings(app, &envelope);
     }
+}
+
+/// How far ahead the phone pre-registers reminders.
+///
+/// iOS caps pending notifications at 64 and Android keeps only the next
+/// chained alarm, so this is a horizon rather than a complete schedule: it is
+/// refreshed on every state change, settings save, and foreground.
+#[cfg(mobile)]
+const REMINDER_PLAN_LIMIT: usize = 48;
+
+#[cfg(mobile)]
+pub(crate) fn reminder_plan_limit() -> usize {
+    REMINDER_PLAN_LIMIT
+}
+
+/// Re-registers the phone's own break reminders from current engine state.
+///
+/// This is the standalone delivery path. The engine cannot run while the app
+/// is suspended, so the instants at which breaks fall due are handed to the OS
+/// in advance; without this the phone alerts only while someone is already
+/// looking at it, which is precisely when they least need it.
+///
+/// Called after anything that can move a deadline. Recomputing and replacing
+/// the whole plan is deliberate: a stale instant is worse than a missing one,
+/// because it announces a break the engine no longer believes in.
+#[cfg(mobile)]
+pub(crate) fn refresh_reminder_plan(app: &AppHandle, view: &EngineView) {
+    use tauri_plugin_eyecare::EyecareExt;
+
+    // Choosing the watch means the wrist is the only surface on purpose, so
+    // the phone cancels its plan rather than quietly double-alerting.
+    if !view.settings.alert_target.alerts_on_phone() {
+        let _ = app.eyecare().cancel_local_reminders();
+        return;
+    }
+    let now = chrono::Utc::now();
+    let deadline = match &view.snapshot.phase {
+        pausio_protocol::TimerPhase::Working
+        | pausio_protocol::TimerPhase::PreBreak
+        | pausio_protocol::TimerPhase::Breaking { .. } => {
+            Some(now + chrono::Duration::seconds(view.snapshot.remaining_seconds.into()))
+        }
+        _ => None,
+    };
+    let slots = pausio_core::reminder_plan(
+        &view.settings,
+        &view.snapshot.phase,
+        deadline,
+        now,
+        REMINDER_PLAN_LIMIT,
+    );
+    // A scheduling failure must never break the in-app timer. The next state
+    // change refreshes the plan, and the settings panel surfaces the degraded
+    // state through `get_reminder_plan_status`.
+    let _ = app.eyecare().schedule_local_reminders(&slots);
 }
 
 /// Posts a notification and reports whether a person will actually see it.
@@ -145,7 +203,10 @@ pub(crate) fn sync_watch_state(app: &AppHandle, view: &EngineView) {
 /// `Ok` means "macOS is configured to draw this", not "this specific banner has
 /// appeared". That is the only question callers need answered: it decides
 /// whether PausIO must raise a surface of its own as well.
-#[cfg(desktop)]
+///
+/// This compiles on mobile as well, where it covers the in-foreground case. A
+/// backgrounded phone is served by the pre-scheduled reminder plan instead,
+/// because no code of ours runs at that moment.
 pub(crate) fn show_local_notification(
     app: &AppHandle,
     title: &str,
@@ -174,9 +235,17 @@ pub(crate) fn show_local_notification(
     {
         use tauri_plugin_notification::NotificationExt;
         let notification = app.notification().builder().title(title).body(body);
+        // Named system sounds are a desktop concept; the mobile hosts use the
+        // platform default for the channel instead of PausIO's own mapping.
+        #[cfg(desktop)]
         let notification = match sound {
             Some(sound) => notification.sound(crate::sound_player::notification_sound_name(sound)),
             None => notification,
+        };
+        #[cfg(not(desktop))]
+        let notification = {
+            let _ = sound;
+            notification
         };
         notification.show().map_err(|error| error.to_string())
     }
@@ -197,7 +266,6 @@ pub(crate) fn notification_permission_state() -> String {
 /// The configured cue for a reminder surfacing — Balanced's persistent
 /// prompt, or a native notification in the quieter styles — or `None` when
 /// the chosen sound timing does not include that moment.
-#[cfg(desktop)]
 pub(crate) fn reminder_cue(settings: &Settings) -> Option<SystemSound> {
     matches!(
         settings.sound_timing,
@@ -206,19 +274,42 @@ pub(crate) fn reminder_cue(settings: &Settings) -> Option<SystemSound> {
     .then_some(settings.notification_sound_name)
 }
 
+/// Whether this device should announce a break itself.
+///
+/// Always true on desktop, which has no wearable concept at all. On a phone it
+/// honours the alert target, so choosing the watch keeps the phone genuinely
+/// silent rather than merely quieter.
+fn phone_announces(view: &EngineView) -> bool {
+    #[cfg(mobile)]
+    {
+        view.settings.alert_target.alerts_on_phone()
+    }
+    #[cfg(not(mobile))]
+    {
+        let _ = view;
+        true
+    }
+}
+
 /// Delivers an advisory nudge, falling back to PausIO's own toast when macOS
 /// will not draw a banner.
 ///
 /// Without the fallback these reminders were invisible: the only other surface
 /// was a screen-reader-only announcement inside the main window, which is
-/// normally hidden in the tray, so a sighted person saw nothing at all.
-#[cfg(desktop)]
+/// normally hidden in the tray, so a sighted person saw nothing at all. A
+/// phone has no such window, so there the notification is all there is.
 fn show_nudge(app: &AppHandle, settings: &Settings, nudge: &str, title: &str, body: &str) {
     if crate::is_e2e() {
         return;
     }
-    if show_local_notification(app, title, body, reminder_cue(settings)).is_err() {
+    let delivered = show_local_notification(app, title, body, reminder_cue(settings)).is_ok();
+    #[cfg(desktop)]
+    if !delivered {
         crate::break_windows::show_nudge_toast(app, settings.locale, nudge);
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (delivered, nudge);
     }
 }
 
@@ -280,12 +371,18 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                 let _ = app.emit("state:changed", &view.snapshot);
             }
             EngineEvent::Incoming(kind) => {
-                #[cfg(desktop)]
-                {
+                // The phone posts this itself while in the foreground; the
+                // pre-scheduled plan covers it while suspended.
+                #[cfg(any(desktop, mobile))]
+                if phone_announces(view) {
                     let locale = view.settings.locale;
                     let kind_label = match kind {
-                        BreakKind::Short => crate::i18n::tray_break_kind_short(locale),
-                        BreakKind::Long => crate::i18n::tray_break_kind_long(locale),
+                        pausio_protocol::BreakKind::Short => {
+                            crate::i18n::tray_break_kind_short(locale)
+                        }
+                        pausio_protocol::BreakKind::Long => {
+                            crate::i18n::tray_break_kind_long(locale)
+                        }
                     };
                     let _ = show_local_notification(
                         app,
@@ -297,8 +394,7 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                 let _ = app.emit("break:incoming", kind);
             }
             EngineEvent::BlinkNudge => {
-                #[cfg(desktop)]
-                {
+                if phone_announces(view) {
                     let locale = view.settings.locale;
                     show_nudge(
                         app,
@@ -311,8 +407,7 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                 let _ = app.emit("nudge:blink", ());
             }
             EngineEvent::PostureNudge => {
-                #[cfg(desktop)]
-                {
+                if phone_announces(view) {
                     let locale = view.settings.locale;
                     show_nudge(
                         app,
@@ -325,8 +420,7 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                 let _ = app.emit("nudge:posture", ());
             }
             EngineEvent::HydrationNudge => {
-                #[cfg(desktop)]
-                {
+                if phone_announces(view) {
                     let locale = view.settings.locale;
                     show_nudge(
                         app,
@@ -397,6 +491,20 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                         }
                     }
                 }
+                // A phone has no overlay or prompt window: the notification is
+                // the whole surface. While the app is suspended the
+                // pre-scheduled plan has already posted this, so the engine
+                // only needs to cover the foreground case.
+                #[cfg(mobile)]
+                if phone_announces(view) {
+                    let locale = view.settings.locale;
+                    let _ = show_local_notification(
+                        app,
+                        crate::i18n::notification_due_title(locale),
+                        crate::i18n::notification_due_body(locale),
+                        reminder_cue(&view.settings),
+                    );
+                }
                 let _ = app.emit("break:due", kind);
             }
             EngineEvent::Started(kind) => {
@@ -440,6 +548,18 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                 }
                 #[cfg(desktop)]
                 set_quit_enabled(view.settings.strictness != Strictness::Strict);
+                // The phone cannot dim a screen it is not driving, so a
+                // started break is announced rather than shown.
+                #[cfg(mobile)]
+                if phone_announces(view) {
+                    let locale = view.settings.locale;
+                    let _ = show_local_notification(
+                        app,
+                        crate::i18n::notification_started_title(locale),
+                        crate::i18n::notification_started_body(locale),
+                        reminder_cue(&view.settings),
+                    );
+                }
                 let _ = app.emit("break:started", kind);
             }
             EngineEvent::Ended(kind) => {

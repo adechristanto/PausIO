@@ -1,10 +1,13 @@
 //! Product timing logic. This crate deliberately knows nothing about Tauri or a UI.
 
 mod engine;
+mod reminders;
 mod settings;
 mod types;
 
 pub use engine::{TimerClock, TimerDriver, TimerEngine, due_grace_seconds};
+pub use pausio_protocol::{AlertTarget, ReminderKind, ReminderScheduleReport, ReminderSlot};
+pub use reminders::reminder_plan;
 pub use settings::{
     Accent, BreakRoutine, DisplayTarget, Locale, Settings, SettingsError, SoundTiming, Strictness,
     SystemSound, Theme,
@@ -46,6 +49,130 @@ mod tests {
     #[test]
     fn defaults_are_valid() {
         Settings::default().validate().unwrap();
+    }
+
+    /// A fresh install must alert on the device it is installed on. Defaulting
+    /// to the watch, or to an implicit connection, would make an unpaired
+    /// phone silently do nothing at all.
+    #[test]
+    fn a_new_install_is_standalone_and_connects_no_wearable() {
+        let settings = Settings::default();
+        assert_eq!(settings.alert_target, AlertTarget::Phone);
+        assert!(!settings.watch_enabled);
+        assert!(settings.alert_target.alerts_on_phone());
+        assert!(!settings.alert_target.alerts_on_watch());
+    }
+
+    #[test]
+    fn alert_target_routing_is_explicit_for_each_choice() {
+        assert!(AlertTarget::Phone.alerts_on_phone());
+        assert!(!AlertTarget::Phone.alerts_on_watch());
+        // Choosing the watch keeps the phone quiet on purpose: the point is a
+        // private haptic, not a banner on a screen that may be shared.
+        assert!(!AlertTarget::Watch.alerts_on_phone());
+        assert!(AlertTarget::Watch.alerts_on_watch());
+        assert!(AlertTarget::Both.alerts_on_phone());
+        assert!(AlertTarget::Both.alerts_on_watch());
+    }
+
+    /// Both fields are additive, so settings written by an earlier build must
+    /// still load — and must land on the standalone defaults when they do.
+    #[test]
+    fn settings_saved_before_these_fields_existed_still_load() {
+        let mut stored = serde_json::to_value(Settings::default()).unwrap();
+        let object = stored.as_object_mut().unwrap();
+        object.remove("alert_target");
+        object.remove("watch_enabled");
+        let decoded: Settings = serde_json::from_value(stored).unwrap();
+        assert_eq!(decoded.alert_target, AlertTarget::Phone);
+        assert!(!decoded.watch_enabled);
+        decoded.validate().unwrap();
+    }
+
+    /// The phone is suspended constantly; that must read as ordinary elapsed
+    /// time, never as the person having walked away.
+    #[test]
+    fn reconciling_after_suspension_makes_the_break_due_instead_of_pausing() {
+        let mut engine = engine();
+        let settings = engine.settings().clone();
+        let events = engine.reconcile_to(settings.work_seconds + 90, active_now());
+        assert!(matches!(
+            engine.snapshot().phase,
+            TimerPhase::BreakDue { .. }
+        ));
+        assert!(events.iter().any(|e| matches!(e, EngineEvent::Due(_))));
+        // The desktop's woke_after() would have produced this; on a phone it
+        // would stop the timer every time the screen turned off.
+        assert!(!matches!(
+            engine.snapshot().phase,
+            TimerPhase::Paused { .. }
+        ));
+    }
+
+    /// A phone left closed overnight must not replay every interval it missed,
+    /// which would inflate break counters and fire a burst of transitions.
+    #[test]
+    fn a_long_suspension_yields_one_transition_not_a_replay() {
+        let mut engine = engine();
+        engine.reconcile_to(12 * 60 * 60, active_now());
+        let snapshot = engine.snapshot();
+        assert!(matches!(snapshot.phase, TimerPhase::BreakDue { .. }));
+        assert_eq!(snapshot.completed_short_breaks, 0);
+    }
+
+    /// A break whose duration elapsed while the app was suspended was taken:
+    /// the person was demonstrably not looking at the phone.
+    #[test]
+    fn a_break_that_elapsed_while_suspended_counts_as_taken() {
+        let mut engine = engine();
+        engine.take_break_now().unwrap();
+        let events = engine.reconcile_to(600, active_now());
+        assert!(events.iter().any(|e| matches!(e, EngineEvent::Ended(_))));
+        assert!(!events.iter().any(|e| matches!(e, EngineEvent::Skipped(_))));
+        assert!(matches!(engine.snapshot().phase, TimerPhase::Working));
+    }
+
+    /// Elapsed time is not consent to resume. A deliberate hold has to survive
+    /// any amount of suspension.
+    #[test]
+    fn reconciling_never_overrides_a_manual_pause() {
+        let mut engine = engine();
+        engine.pause(PauseReason::Manual).unwrap();
+        engine.reconcile_to(6 * 60 * 60, active_now());
+        assert!(matches!(
+            engine.snapshot().phase,
+            TimerPhase::Paused {
+                reason: PauseReason::Manual
+            }
+        ));
+    }
+
+    #[test]
+    fn reconciling_an_already_due_break_keeps_it_due() {
+        let mut engine = engine();
+        let settings = engine.settings().clone();
+        engine.reconcile_to(settings.work_seconds, active_now());
+        assert!(matches!(
+            engine.snapshot().phase,
+            TimerPhase::BreakDue { .. }
+        ));
+        engine.reconcile_to(3_600, active_now());
+        assert!(matches!(
+            engine.snapshot().phase,
+            TimerPhase::BreakDue { .. }
+        ));
+    }
+
+    /// Reopening the app a few seconds later is the common case and must not
+    /// jump the timer forward.
+    #[test]
+    fn a_brief_suspension_only_advances_the_countdown() {
+        let mut engine = engine();
+        let before = engine.snapshot().remaining_seconds;
+        engine.reconcile_to(30, active_now());
+        let after = engine.snapshot().remaining_seconds;
+        assert_eq!(before - after, 30);
+        assert!(matches!(engine.snapshot().phase, TimerPhase::Working));
     }
 
     #[test]
@@ -828,7 +955,7 @@ mod tests {
         );
     }
     #[test]
-    fn screen_lock_consumes_the_work_countdown() {
+    fn screen_lock_credits_locked_time_back_to_the_work_countdown() {
         let mut e = engine();
         e.advance(19, active_now());
         let remaining = e.snapshot().remaining_seconds;
@@ -841,21 +968,58 @@ mod tests {
         ));
         e.screen_unlocked(17, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::Working));
-        assert_eq!(e.snapshot().remaining_seconds, remaining - 17);
+        // Time behind a locked screen is time away from the display, so it winds
+        // the countdown back up rather than consuming it.
+        assert_eq!(e.snapshot().remaining_seconds, remaining + 17);
         assert_eq!(e.snapshot().completed_short_breaks, 0);
     }
+    /// The product example: 20 minutes on the clock, five left when the screen
+    /// locks, away for half an hour — come back to a full interval, not a break
+    /// prompt and not a stale five minutes.
     #[test]
-    fn lock_that_exhausts_work_starts_a_fresh_interval_without_a_due_prompt() {
+    fn a_lock_longer_than_the_interval_returns_to_a_full_countdown() {
+        let mut e = engine();
+        let work_seconds = e.settings.work_seconds;
+        e.advance(work_seconds - 5 * 60, active_now());
+        assert_eq!(e.snapshot().remaining_seconds, 5 * 60);
+        e.screen_locked();
+        let events = e.screen_unlocked(30 * 60, active_now());
+        assert!(matches!(e.snapshot().phase, TimerPhase::Working));
+        assert_eq!(e.snapshot().remaining_seconds, work_seconds);
+        // Credited back, never over-credited: the cap is a full interval.
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::Due(_) | EngineEvent::Started(_)))
+        );
+        assert_eq!(e.completed_breaks, 0);
+        assert_eq!(e.snapshot().completed_short_breaks, 0);
+    }
+    /// The counterpart: a brief lock gives back exactly what it took, with no
+    /// minimum-duration threshold to fall under.
+    #[test]
+    fn a_short_lock_credits_back_exactly_its_own_duration() {
+        let mut e = engine();
+        let work_seconds = e.settings.work_seconds;
+        e.advance(work_seconds - 5 * 60, active_now());
+        e.screen_locked();
+        e.screen_unlocked(2 * 60, active_now());
+        assert!(matches!(e.snapshot().phase, TimerPhase::Working));
+        assert_eq!(e.snapshot().remaining_seconds, 7 * 60);
+    }
+    #[test]
+    fn a_lock_that_reaches_the_cap_leaves_break_cadence_untouched() {
         let mut e = engine();
         e.settings.long_break_every = Some(4);
         e.completed_breaks = 3;
         e.advance(19, active_now());
-        let remaining = e.snapshot().remaining_seconds;
         e.screen_locked();
-        let events = e.screen_unlocked(remaining, active_now());
+        let events = e.screen_unlocked(e.settings.work_seconds * 2, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::Working));
         assert_eq!(e.snapshot().remaining_seconds, e.settings.work_seconds);
         assert_eq!(e.snapshot().completed_short_breaks, 0);
+        // A rewind is not a break: it must not advance the cadence counter, so
+        // the long break still lands on the interval it was already due on.
         assert_eq!(e.completed_breaks, 3);
         assert_eq!(e.next_kind(), BreakKind::Long);
         assert!(
@@ -881,14 +1045,41 @@ mod tests {
         assert_eq!(e.snapshot().remaining_seconds, e.settings.work_seconds);
         assert_eq!(e.completed_breaks, 0);
     }
+    /// Locking inside the pre-break warning window lifts the countdown back out
+    /// of it: the heads-up already shown is no longer imminent, so the phase has
+    /// to fall back to Working rather than leaving a stale warning on screen.
     #[test]
-    fn lock_that_enters_warning_range_restores_pre_break_without_due_event() {
+    fn lock_that_leaves_warning_range_restores_working_without_due_event() {
         let mut e = engine();
-        e.remaining = e.settings.pre_break_seconds + 10;
+        e.remaining = e.settings.pre_break_seconds;
+        e.phase = TimerPhase::PreBreak;
         e.screen_locked();
         let events = e.screen_unlocked(10, active_now());
+        assert!(matches!(e.snapshot().phase, TimerPhase::Working));
+        assert_eq!(
+            e.snapshot().remaining_seconds,
+            e.settings.pre_break_seconds + 10
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::Due(_) | EngineEvent::Incoming(_)))
+        );
+    }
+    /// A lock too short to clear the warning window keeps the phase in PreBreak
+    /// rather than flapping it back to Working for a handful of seconds.
+    #[test]
+    fn a_lock_that_stays_inside_warning_range_remains_pre_break() {
+        let mut e = engine();
+        e.remaining = e.settings.pre_break_seconds - 10;
+        e.phase = TimerPhase::PreBreak;
+        e.screen_locked();
+        let events = e.screen_unlocked(5, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::PreBreak));
-        assert_eq!(e.snapshot().remaining_seconds, e.settings.pre_break_seconds);
+        assert_eq!(
+            e.snapshot().remaining_seconds,
+            e.settings.pre_break_seconds - 5
+        );
         assert!(
             !events
                 .iter()
@@ -920,6 +1111,31 @@ mod tests {
         e.screen_unlocked(e.settings.short_break_seconds, active_now());
         assert!(matches!(e.snapshot().phase, TimerPhase::Working));
         assert_eq!(e.completed_breaks, 1);
+    }
+    /// A locked screen looks idle to every platform's idle counter. The idle
+    /// path must not act on that: its fifteen-minute branch resets `remaining`
+    /// and replaces the pause reason, which would discard the lock context and
+    /// silently cancel the rewind for exactly the long absences the rewind is
+    /// for.
+    #[test]
+    fn idle_reports_never_disturb_a_screen_lock() {
+        let mut e = engine();
+        let work_seconds = e.settings.work_seconds;
+        e.advance(work_seconds - 5 * 60, active_now());
+        e.screen_locked();
+
+        assert!(e.report_idle(20 * 60).unwrap().is_empty());
+        assert!(matches!(
+            e.snapshot().phase,
+            TimerPhase::Paused {
+                reason: PauseReason::ScreenLock
+            }
+        ));
+
+        // The lock context survived, so unlocking still credits the time back.
+        e.screen_unlocked(20 * 60, active_now());
+        assert!(matches!(e.snapshot().phase, TimerPhase::Working));
+        assert_eq!(e.snapshot().remaining_seconds, work_seconds);
     }
     #[test]
     fn lock_preserves_manual_pause_and_unmatched_unlock_is_a_no_op() {

@@ -1,6 +1,16 @@
 <manifest
   xmlns:android="http://schemas.android.com/apk/res/android"
 >
+  <!--
+    Standalone break delivery. The phone schedules its own reminders so it
+    works with no paired wearable: POST_NOTIFICATIONS to show them,
+    SCHEDULE_EXACT_ALARM so a break lands on time rather than whenever the
+    system next feels like it, and RECEIVE_BOOT_COMPLETED to re-arm the chain
+    after a restart. None of these grant network or content access.
+  -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <application>
     <service
       android:name=".PausIOWearReceiptListenerService"
@@ -12,5 +22,15 @@
         <data android:scheme="wear" android:host="*" android:pathPrefix="/pausio" />
       </intent-filter>
     </service>
+    <receiver android:name=".PausIOPhoneReminderReceiver" android:exported="false" />
+    <receiver android:name=".PausIOPhoneRescheduleReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>

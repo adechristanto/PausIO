@@ -38,7 +38,10 @@ This document outlines the planned milestones and development directions for Pau
 ## 3. Mobile & Wearable Companions
 
 - [x] **Deterministic Mobile Generation**: Single codebase generating iOS and Android companion shells.
+- [x] **Standalone Phone Delivery**: iOS and Android pre-schedule break reminders with the OS (`UNUserNotificationCenter` / `AlarmManager`), so breaks arrive while the app is suspended, with no wearable and no network.
+- [x] **Optional Wearable Connection**: A watch is opt-in from Settings (`watch_enabled`), and `alert_target` chooses whether breaks announce on the phone, the watch, or both.
 - [x] **Wearable Bridge Contracts**: Apple Watch (SwiftPM/WatchConnectivity) and Wear OS (Compose/Data Layer) schedule synchronization.
+- [ ] **Android Foreground Service (High Accuracy)**: Optional opt-in service for exact break timing on devices with aggressive battery management, where inexact alarms delay reminders.
 - [ ] **Hardware Battery Benchmarking**:
   - Real-world power consumption validation against target thresholds (≤3%/day on watchOS, ≤4%/day on Wear OS).
 - [ ] **Store Releases**:

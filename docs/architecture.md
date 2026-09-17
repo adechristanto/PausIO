@@ -67,13 +67,28 @@ A deliberately small, dual-licensed (`MIT OR Apache-2.0`) crate containing only 
 
 The wire contract is versioned (`SCHEMA_VERSION = 1`). The contract fixture at `tests/fixtures/watch-settings-v1.json` is part of the test suite and must be updated whenever the envelope schema changes.
 
-### `plugins/tauri-plugin-eyecare` — watch bridge
+### `plugins/tauri-plugin-eyecare` — phone-native bridge
 
-A standard Tauri v2 plugin that wraps:
+A standard Tauri v2 plugin covering two independent phone-native concerns:
+
+**Local reminders** — the phone's own standalone delivery path, used whether or
+not a watch exists:
+
+- **iOS** (`ios/Sources/PausIOLocalReminders.swift`): schedules
+  `UNCalendarNotificationTrigger`s, budgeting break cues ahead of pre-break
+  warnings so the 64 pending-notification ceiling truncates warnings first.
+- **Android** (`android/.../PausIOPhoneReminders.kt`): arms the next instant with
+  `AlarmManager` and chains from its receiver, re-arming after boot, package
+  replacement, and time/timezone changes.
+- **Rust**: `schedule_local_reminders`, `cancel_local_reminders`,
+  `local_notification_permission`, `request_local_notification_permission`,
+  `post_test_reminder`.
+
+**Watch bridge** — optional, and only active once `watch_enabled` is set:
 
 - **iOS** (`ios/`): Swift code using WatchConnectivity to send `WatchSettingsEnvelopeV1` to the Apple Watch companion and receive back actions from the ring.
 - **Android** (`android/`): Kotlin code using the Wearable Data Layer API for the equivalent Wear OS flow.
-- **Rust** (`src/lib.rs`): The plugin's Tauri glue: `sync_settings`, `send_test_nudge`, `status`, and `take_pending_action`.
+- **Rust** (`src/lib.rs`): `sync_settings`, `send_test_nudge`, `status`, and `take_pending_action`.
 
 The plugin is linked only into iOS and Android hosts. Desktop builds do not contain the plugin, watch commands, watch-envelope persistence, or a desktop-to-phone relay.
 
@@ -128,11 +143,42 @@ Key frontend modules:
 - `src/lib/errors.ts`, `format.ts`, `history-analytics.ts`, `sound.ts`, `tooltip.ts` — utilities.
 - `src/components/` — `BreakOverlay.svelte`, `BreakPrompt.svelte`, `TimerRing.svelte`, `ShortcutField.svelte`, `SettingsPanel.svelte`, `HistoryPanel.svelte`, `Onboarding.svelte`, `NudgeToast.svelte`, `Advanced.svelte`.
 
+### Standalone operation
+
+Every host runs the whole product on its own. Nothing requires pairing, a
+companion app, or a network.
+
+- **Desktop** owns a 1 s tick loop for as long as the process is running, so it
+  decides at the moment a break falls due. It contains no wearable code: the
+  plugin is target-gated out, the watch commands are not registered, and launch
+  purges `WATCH_ONLY_KEYS` (`store.rs`) from its store.
+- **Phone** cannot tick while suspended — iOS suspends the app and Android dozes
+  it — so it pre-registers break instants with the OS. `reminder_plan`
+  (`crates/pausio-core/src/reminders.rs`) projects the next `REMINDER_PLAN_LIMIT`
+  instants from settings and the current phase; `refresh_reminder_plan`
+  (`events.rs`) re-registers them after anything that moves a deadline. The
+  native side registers them with `UNUserNotificationCenter` (iOS) or chained
+  `AlarmManager` alarms (Android).
+- **Watch** keeps its own offline schedule from the last envelope it received,
+  and falls back to built-in defaults if it never received one.
+
+A phone tick gap is ordinary, not evidence of absence, so mobile calls
+`TimerEngine::reconcile_to` instead of desktop's `woke_after`: it advances the
+phase using the same `advance` transitions but never produces `Paused`, which
+keeps the reopened app consistent with a notification the OS already delivered.
+
+Two settings govern this, both phone-only and both ignored by desktop:
+
+| Setting         | Default | Effect                                                                                                          |
+| --------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `alert_target`  | `phone` | `phone`, `watch`, or `both`. `watch` cancels the phone's plan so the reminder stays private on a shared screen. |
+| `watch_enabled` | `false` | While false the phone performs no envelope sync, no status polling, and no test nudges.                         |
+
 ### Watch companions
 
 Both companions receive `WatchSettingsEnvelopeV1` from the phone bridge and maintain an offline reminder schedule from it. They use absolute deadlines locally rather than one-second phone messages, retain only newer revisions, and acknowledge applied revisions. Neither makes network calls.
 
-Apple Watch communication is strictly iPhone-to-watch through WatchConnectivity. Wear OS communication is Android-phone-to-watch through the Wearable Data Layer. Desktop builds do not communicate with wearables, directly or through a phone relay.
+Apple Watch communication is strictly iPhone-to-watch through WatchConnectivity. Wear OS communication is Android-phone-to-watch through the Wearable Data Layer. Desktop builds do not communicate with wearables, directly or through a phone relay. A watch is a companion, never a dependency: the phone delivers breaks on its own and only syncs to a watch a person explicitly connected.
 
 - **`watch/apple-watch/`** — SwiftPM package, Swift 6, targets watchOS. Tested with `swift test` from that directory.
 - **`watch/wear-os/`** — Gradle project, Kotlin. Tested with `./gradlew :wear:testDebugUnitTest`.

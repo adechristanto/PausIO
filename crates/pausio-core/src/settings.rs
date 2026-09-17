@@ -1,4 +1,5 @@
 use chrono::{DateTime, Datelike, Local, Timelike};
+use pausio_protocol::AlertTarget;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -99,6 +100,18 @@ pub struct Settings {
     pub auto_detect_fullscreen: bool,
     #[serde(default = "default_auto_detect")]
     pub auto_detect_do_not_disturb: bool,
+    /// Where a break announces itself on a phone. Defaults to the phone so a
+    /// new installation is useful with no wearable at all; choosing `Watch`
+    /// deliberately keeps the phone silent so the reminder stays private on a
+    /// screen that may be shared. Desktop builds ignore this field entirely.
+    #[serde(default)]
+    pub alert_target: AlertTarget,
+    /// Whether the phone talks to a wearable at all. Off until a person opts
+    /// in from Settings: an unconnected watch must cost nothing, so while this
+    /// is false the phone performs no envelope sync, no status polling, and no
+    /// test nudges. Desktop builds never read this.
+    #[serde(default)]
+    pub watch_enabled: bool,
 }
 
 const fn default_blink_nudge_minutes() -> Option<u8> {
@@ -243,6 +256,8 @@ impl Default for Settings {
             take_break_shortcut: None,
             auto_detect_fullscreen: default_auto_detect(),
             auto_detect_do_not_disturb: default_auto_detect(),
+            alert_target: AlertTarget::default(),
+            watch_enabled: false,
         }
     }
 }

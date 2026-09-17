@@ -1,14 +1,25 @@
-//! Native Tauri bridge for PausIO's deliberately small mobile/watch contract.
+//! Native Tauri bridge for PausIO's mobile surfaces.
 //!
-//! Timer decisions stay in `pausio-core`. This plugin only transports the latest
-//! validated settings revision and exposes diagnostic delivery state.
+//! Two separate concerns share this plugin because both are phone-native:
+//!
+//! - **Local reminders.** A phone cannot keep a timer running — iOS suspends
+//!   the app and Android dozes it — so break instants computed by
+//!   `pausio-core` are registered with the OS in advance. This is what makes
+//!   the phone work standalone, with no wearable and no network.
+//! - **The watch bridge.** Strictly optional, and only used once a person has
+//!   connected a watch in Settings.
+//!
+//! Timer decisions stay in `pausio-core`; this plugin only transports.
 
 #[cfg(not(mobile))]
 use std::marker::PhantomData;
 
 #[cfg(mobile)]
 use pausio_protocol::WatchRuntimeActionV1;
-use pausio_protocol::{NudgeResult, WatchSettingsEnvelopeV1, WatchStatus};
+use pausio_protocol::{
+    NudgeResult, ReminderScheduleReport, ReminderSlot, WatchPermissionState,
+    WatchSettingsEnvelopeV1, WatchStatus,
+};
 use tauri::{
     Manager, Runtime,
     plugin::{Builder, TauriPlugin},
@@ -22,8 +33,18 @@ pub enum Error {
     #[cfg(mobile)]
     #[error(transparent)]
     Invoke(#[from] tauri::plugin::mobile::PluginInvokeError),
-    #[error("watch bridges are only available in a mobile PausIO shell")]
+    #[error("this capability is only available in a mobile PausIO shell")]
     Unavailable,
+}
+
+/// The reminder instants to register, replacing anything already pending.
+///
+/// Sent as a whole plan rather than incrementally: both platform schedulers
+/// are easiest to reason about when the previous plan is cleared and rewritten,
+/// and an empty `slots` is therefore the way a caller cancels everything.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ReminderPlanRequest<'a> {
+    pub slots: &'a [ReminderSlot],
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -83,6 +104,87 @@ impl<R: Runtime> Eyecare<R> {
 
     #[cfg(not(mobile))]
     pub fn status(&self) -> Result<WatchStatus> {
+        Err(Error::Unavailable)
+    }
+
+    /// Replaces the pending local reminder plan with `slots`.
+    ///
+    /// This is the phone's standalone delivery mechanism: the instants are
+    /// registered with the OS, so they fire whether or not PausIO is running
+    /// and whether or not a watch exists. Passing an empty slice cancels
+    /// everything, which is how a pause clears pending reminders.
+    ///
+    /// The returned report says what was *actually* registered — iOS caps
+    /// pending notifications at 64 and Android may downgrade to inexact
+    /// alarms — so callers can tell a person their reminders are degraded
+    /// rather than discovering it when one silently fails to arrive.
+    #[cfg(mobile)]
+    pub fn schedule_local_reminders(
+        &self,
+        slots: &[ReminderSlot],
+    ) -> Result<ReminderScheduleReport> {
+        Ok(self
+            .0
+            .run_mobile_plugin("scheduleLocalReminders", ReminderPlanRequest { slots })?)
+    }
+
+    #[cfg(not(mobile))]
+    pub fn schedule_local_reminders(&self, _: &[ReminderSlot]) -> Result<ReminderScheduleReport> {
+        Err(Error::Unavailable)
+    }
+
+    /// Clears every pending local reminder.
+    #[cfg(mobile)]
+    pub fn cancel_local_reminders(&self) -> Result<()> {
+        self.0
+            .run_mobile_plugin::<serde_json::Value>("cancelLocalReminders", ())?;
+        Ok(())
+    }
+
+    #[cfg(not(mobile))]
+    pub fn cancel_local_reminders(&self) -> Result<()> {
+        Err(Error::Unavailable)
+    }
+
+    /// The current OS notification permission.
+    ///
+    /// With reminders as the only standalone delivery path, a denial is a
+    /// hard functional failure rather than cosmetic, so this is surfaced
+    /// prominently instead of being retried silently.
+    #[cfg(mobile)]
+    pub fn local_notification_permission(&self) -> Result<WatchPermissionState> {
+        Ok(self
+            .0
+            .run_mobile_plugin("localNotificationPermission", ())?)
+    }
+
+    #[cfg(not(mobile))]
+    pub fn local_notification_permission(&self) -> Result<WatchPermissionState> {
+        Err(Error::Unavailable)
+    }
+
+    /// Prompts for notification permission, returning the resulting state.
+    #[cfg(mobile)]
+    pub fn request_local_notification_permission(&self) -> Result<WatchPermissionState> {
+        Ok(self
+            .0
+            .run_mobile_plugin("requestLocalNotificationPermission", ())?)
+    }
+
+    #[cfg(not(mobile))]
+    pub fn request_local_notification_permission(&self) -> Result<WatchPermissionState> {
+        Err(Error::Unavailable)
+    }
+
+    /// Posts a reminder immediately, so a person can confirm that standalone
+    /// delivery actually works on their device without waiting for a break.
+    #[cfg(mobile)]
+    pub fn post_test_reminder(&self) -> Result<NudgeResult> {
+        Ok(self.0.run_mobile_plugin("postTestReminder", ())?)
+    }
+
+    #[cfg(not(mobile))]
+    pub fn post_test_reminder(&self) -> Result<NudgeResult> {
         Err(Error::Unavailable)
     }
 }

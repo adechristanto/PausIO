@@ -2,7 +2,10 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
-#[cfg(desktop)]
+// Mobile needs the notification strings too: a standalone phone posts its own
+// break notifications rather than delegating them to a wearable. The tray and
+// window-title strings it does not use are dead-code-eliminated.
+#[cfg_attr(not(desktop), allow(dead_code))]
 mod i18n;
 mod session_monitor;
 #[cfg(desktop)]
@@ -234,7 +237,10 @@ pub fn run() {
         // these local transport remnants despite returning an unavailable
         // status; discard them once so the desktop store has no watch state.
         #[cfg(desktop)]
-        if store.delete("watch_revision") | store.delete("watch_last_envelope") {
+        if store::WATCH_ONLY_KEYS
+            .iter()
+            .fold(false, |purged, key| store.delete(*key) | purged)
+        {
             store.save()?;
         }
         if let Some(saved) = store.get("settings") {
@@ -302,17 +308,31 @@ pub fn run() {
         } else {
             vec![]
         };
-        // Context is intentionally idempotent: updateApplicationContext keeps only the
-        // newest envelope, so every mobile launch can safely repair a previously missed
-        // phone-to-watch transfer without making the web UI the delivery authority.
+        // Reconcile first: reminders may have fired and been acted on while the
+        // process was not running, so the restored phase has to agree with what
+        // the person was already told before anything is scheduled from it.
         #[cfg(mobile)]
         if let Some(engine) = app.try_state::<EngineState>() {
-            let engine = lock_engine(&engine.0);
-            let snapshot = engine.snapshot();
-            let settings = engine.settings().clone();
-            drop(engine);
-            if let Ok(envelope) = next_watch_settings_envelope(app.handle(), &snapshot, &settings) {
+            let mut guard = lock_engine(&engine.0);
+            let reconciled = guard.reconcile_to(0, Local::now());
+            let view = EngineView::capture(&guard);
+            drop(guard);
+            // Re-register the phone's own plan on every launch. This is the
+            // standalone delivery path and must be repaired even if a watch
+            // was never connected.
+            events::refresh_reminder_plan(app.handle(), &view);
+            // Context is intentionally idempotent: updateApplicationContext keeps only the
+            // newest envelope, so every mobile launch can safely repair a previously missed
+            // phone-to-watch transfer without making the web UI the delivery authority.
+            if view.settings.watch_enabled
+                && let Ok(envelope) =
+                    next_watch_settings_envelope(app.handle(), &view.snapshot, &view.settings)
+            {
                 let _ = deliver_watch_settings(app.handle(), &envelope);
+            }
+            if !reconciled.is_empty() {
+                let guard = lock_engine(&engine.0);
+                drain_and_emit(app.handle(), guard, reconciled);
             }
         }
         #[cfg(desktop)]
@@ -428,6 +448,14 @@ pub fn run() {
                 let mut deferred_for_active_input = false;
                 #[cfg(not(desktop))]
                 let deferred_for_active_input = false;
+                // A tick gap means different things on the two hosts. On a
+                // desktop the machine slept, so the person was demonstrably
+                // away and `woke_after` pauses. On a phone, being suspended is
+                // simply what happens when the screen turns off — pausing
+                // there would stop the timer every time the app is
+                // backgrounded, and would contradict a reminder the OS has
+                // very likely already delivered from the pre-scheduled plan.
+                #[cfg(desktop)]
                 if elapsed >= 30
                     && let Ok(mut wake_events) = engine.woke_after(elapsed_seconds)
                     && !wake_events.is_empty()
@@ -435,14 +463,31 @@ pub fn run() {
                     consumed_by_wake = true;
                     events.append(&mut wake_events);
                 }
+                #[cfg(mobile)]
+                if elapsed >= 30 {
+                    let mut resumed = engine.reconcile_to(elapsed_seconds, Local::now());
+                    consumed_by_wake = true;
+                    events.append(&mut resumed);
+                }
                 #[cfg(desktop)]
                 {
                     let mut current_idle_seconds = None;
+                    // A locked screen reads as idle to every platform's idle
+                    // counter, but the lock already owns that absence: the engine
+                    // is holding the pre-lock state and will credit the time back
+                    // on unlock. Polling anyway would hand the same absence to
+                    // report_idle as well, which is both redundant and — past the
+                    // fifteen-minute threshold — destructive. The core refuses it
+                    // too; this simply avoids asking.
+                    let session_locked = handle
+                        .try_state::<SessionLockState>()
+                        .is_some_and(|lock_state| lock_state.is_locked());
                     // Skip the native idle poll entirely during a break: report_idle's
                     // only effect at this threshold is pause(), which is a no-op while
                     // Breaking, and keeping it out removes a stall vector under the
                     // strict overlay watchdog.
                     if !is_e2e()
+                        && !session_locked
                         && !matches!(
                             engine.snapshot().phase,
                             pausio_protocol::TimerPhase::Breaking { .. }
@@ -528,6 +573,9 @@ pub fn run() {
         commands::sync_watch_settings,
         commands::send_test_nudge,
         commands::get_watch_status,
+        commands::get_notification_permission,
+        commands::request_notification_permission,
+        commands::get_reminder_plan_status,
         commands::e2e_simulate_screen_lock,
     );
     #[cfg(all(debug_assertions, not(mobile)))]
@@ -537,6 +585,9 @@ pub fn run() {
         commands::sync_watch_settings,
         commands::send_test_nudge,
         commands::get_watch_status,
+        commands::get_notification_permission,
+        commands::request_notification_permission,
+        commands::get_reminder_plan_status,
     );
     #[cfg(all(not(debug_assertions), not(mobile)))]
     let builder = register_commands!(builder;);
@@ -564,10 +615,46 @@ fn platform_idle_seconds() -> Option<u32> {
 #[cfg(all(test, desktop))]
 mod tests {
     use crate::break_windows::{bottom_right_position, overlay_watchdog_deadline};
+    use crate::commands::watch_sync_available;
     use crate::platform::linux::{linux_idle_seconds_from, linux_session_locked_from};
     use crate::platform::windows::windows_context_reason_from;
     use pausio_protocol::ContextReason;
     use std::time::Duration;
+
+    /// macOS and Windows must work with no phone and no wearable involved.
+    ///
+    /// The guarantee is structural — `tauri-plugin-eyecare` is target-gated out
+    /// of desktop in `Cargo.toml`, and the watch commands are `#[cfg(mobile)]`
+    /// — but nothing failed loudly if that gating were relaxed by accident.
+    /// This is the tripwire: a desktop build that can reach a wearable at all
+    /// breaks here rather than in someone's install.
+    #[test]
+    fn a_desktop_build_exposes_no_wearable_capability() {
+        assert!(
+            !watch_sync_available(),
+            "desktop builds must report no watch capability"
+        );
+    }
+
+    /// A desktop build must not carry wearable settings either. `alert_target`
+    /// and `watch_enabled` exist in the shared contract because settings are
+    /// shared, but desktop must never act on them.
+    #[test]
+    fn desktop_ignores_the_phone_only_wearable_settings() {
+        let settings = pausio_core::Settings {
+            watch_enabled: true,
+            alert_target: pausio_core::AlertTarget::Watch,
+            ..pausio_core::Settings::default()
+        };
+        // Even asked to alert only a watch, a desktop build still reports no
+        // watch capability: there is no code path that could honour it.
+        assert!(!watch_sync_available());
+        // And the settings remain valid rather than being rejected, so a
+        // profile synced from a phone cannot break a desktop install.
+        settings
+            .validate()
+            .expect("phone fields stay valid on desktop");
+    }
 
     #[test]
     fn prompt_sits_at_the_bottom_right_of_the_work_area() {

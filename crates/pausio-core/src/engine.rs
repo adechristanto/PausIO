@@ -65,8 +65,14 @@ pub struct TimerEngine {
 /// The visible state switches to `Paused(ScreenLock)` while the display is
 /// locked, but the engine must retain the state that existed immediately before
 /// the lock. The native shell measures elapsed time with a monotonic clock and
-/// provides it when the session becomes active again, allowing work time to be
-/// consumed exactly once without surfacing a stale break prompt on unlock.
+/// provides it when the session becomes active again.
+///
+/// A locked screen is time spent away from the display, which is exactly what
+/// the work interval is counting down towards. So locked seconds are *credited
+/// back* to the countdown on unlock rather than consumed by it: lock with 5:00
+/// left for two minutes and 7:00 is left on return; lock for longer than the
+/// whole interval and it simply returns to full. This is capped at
+/// `work_seconds`, so the countdown can never exceed a fresh interval.
 #[derive(Debug, Clone)]
 pub(crate) struct LockContext {
     pub(crate) phase: TimerPhase,
@@ -776,14 +782,17 @@ impl TimerEngine {
                     self.phase = TimerPhase::Dormant;
                     self.remaining = self.settings.work_seconds;
                     self.state_and_tick()
-                } else if locked_seconds >= context.remaining {
-                    // Reaching the end of a work interval while the screen is
-                    // locked is itself enough time away from the display. Start
-                    // a new interval on unlock and never emit Due/Started, which
-                    // would present a stale break prompt to a returning person.
-                    self.start_fresh_work_or_dormant(now)
                 } else {
-                    self.remaining = context.remaining - locked_seconds;
+                    // Time behind a locked screen is time away from the display,
+                    // so it winds the countdown back up instead of down. The cap
+                    // means a lock at least as long as the interval returns to a
+                    // full one — and because the countdown can only grow here, it
+                    // can never reach zero, so no stale Due/Started is ever
+                    // emitted to a returning person.
+                    self.remaining = context
+                        .remaining
+                        .saturating_add(locked_seconds)
+                        .min(self.settings.work_seconds);
                     self.phase = if self.settings.pre_break_seconds > 0
                         && self.remaining <= self.settings.pre_break_seconds
                     {
@@ -829,6 +838,20 @@ impl TimerEngine {
         }
     }
     pub fn report_idle(&mut self, seconds: u32) -> Result<Vec<EngineEvent>, EngineError> {
+        // A locked screen reads as idle to every platform's idle counter, but the
+        // lock already owns this absence: `lock_context` holds the pre-lock state
+        // and `screen_unlocked` credits the time back. Without this guard the
+        // 15-minute branch below would overwrite `remaining` and replace the
+        // ScreenLock pause with an Idle one, discarding that context — so any
+        // lock longer than fifteen minutes would lose the rewind entirely.
+        if matches!(
+            self.phase,
+            TimerPhase::Paused {
+                reason: PauseReason::ScreenLock
+            }
+        ) {
+            return Ok(vec![]);
+        }
         if seconds >= 15 * 60 {
             self.phase = TimerPhase::Paused {
                 reason: PauseReason::Idle,
@@ -854,6 +877,39 @@ impl TimerEngine {
             return self.pause(PauseReason::Sleep);
         }
         Ok(vec![])
+    }
+    /// Brings the phase back in line with wall-clock time after the host was
+    /// not running, without ever inferring that the person was away.
+    ///
+    /// This exists because a phone is not a desktop. On a desktop a tick gap
+    /// means the *machine* slept, so [`Self::woke_after`] pauses: the person
+    /// was demonstrably absent. On a phone, suspension is simply what happens
+    /// when the screen turns off, and pausing there would silently stop the
+    /// timer every time the app is backgrounded — the app would appear to work
+    /// only while being watched.
+    ///
+    /// It also has to agree with what the person was already told. The phone's
+    /// reminders are registered in advance for absolute instants and fire
+    /// while the process is dead, so a banner may already have announced a
+    /// break that the in-app state knows nothing about. Reopening the app must
+    /// therefore reflect that same break rather than contradict it.
+    ///
+    /// The transitions themselves are `advance`'s, so the two can never drift;
+    /// the difference is only that elapsed time here is ordinary progress. An
+    /// explicit hold — a manual pause, or one the system chose — is left
+    /// untouched, because elapsed time is not a reason to overrule it.
+    pub fn reconcile_to(&mut self, elapsed_seconds: u32, now: DateTime<Local>) -> Vec<EngineEvent> {
+        // A pause is an intent, not a countdown. `advance` already releases a
+        // timed pause once its deadline passes, and leaves every other pause
+        // alone, so deferring to it keeps that single rule in one place.
+        if matches!(self.phase, TimerPhase::Paused { .. }) {
+            return self.advance(elapsed_seconds, now);
+        }
+        // Clamp to the current phase so one suspension yields one transition.
+        // Without this, a phone left closed overnight would burn through every
+        // interval it missed and arrive with inflated break counters.
+        let clamped = elapsed_seconds.min(self.remaining.max(1));
+        self.advance(clamped, now)
     }
     pub(crate) fn next_kind(&self) -> BreakKind {
         if self
