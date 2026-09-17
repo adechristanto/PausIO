@@ -211,6 +211,22 @@ pub(crate) fn apply_retention_and_cap(
     history
 }
 
+/// Deserializes the stored history array leniently: one malformed record (a
+/// hand-edited file, a future schema this build does not understand, a
+/// partial write truncated mid-record) must never discard every other event.
+/// Only a value that is not a JSON array at all — i.e. the whole key is
+/// unusable — falls back to empty; everything else keeps every record that
+/// parses and silently drops the rest.
+pub(crate) fn parse_history_leniently(value: serde_json::Value) -> Vec<HistoryEvent> {
+    let serde_json::Value::Array(items) = value else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .filter_map(|item| serde_json::from_value::<HistoryEvent>(item).ok())
+        .collect()
+}
+
 pub(crate) fn append_history(
     app: &AppHandle,
     entries: Vec<HistoryEvent>,
@@ -219,7 +235,7 @@ pub(crate) fn append_history(
     let store = app.store(history_store_name()).map_err(internal_error)?;
     let history = store
         .get("history")
-        .and_then(|value| serde_json::from_value::<Vec<HistoryEvent>>(value).ok())
+        .map(parse_history_leniently)
         .unwrap_or_default();
     let history = apply_retention_and_cap(history, entries, retention_days);
     store.set(
@@ -345,7 +361,10 @@ mod tests {
     use pausio_protocol::BreakKind;
 
     use super::history_break_id;
-    use super::{HISTORY_LIMIT, HistoryEvent, HistoryEventKind, apply_retention_and_cap};
+    use super::{
+        HISTORY_LIMIT, HistoryEvent, HistoryEventKind, apply_retention_and_cap,
+        parse_history_leniently,
+    };
 
     fn synthetic_history(count: usize) -> Vec<HistoryEvent> {
         let now = chrono::Utc::now();
@@ -470,5 +489,50 @@ mod tests {
         assert!(id.is_some());
         assert_eq!(target_break_seconds, Some(settings.short_break_seconds));
         assert!(settings.work_seconds > 0);
+    }
+
+    /// One record failing to deserialize (a hand-edited file, a future schema
+    /// this build predates, a value truncated by a partial write) must not
+    /// discard the rest of a person's history. This is the exact bug this
+    /// function fixes: `serde_json::from_value::<Vec<HistoryEvent>>` fails the
+    /// whole array the moment any one element is invalid.
+    #[test]
+    fn one_malformed_record_does_not_discard_the_rest_of_the_history() {
+        let good = synthetic_history(3);
+        let mut array: Vec<serde_json::Value> = good
+            .iter()
+            .map(|event| serde_json::to_value(event).unwrap())
+            .collect();
+        // Not a HistoryEvent at all: `kind` is neither a known variant nor
+        // present, so this element fails to deserialize on its own.
+        array.insert(1, serde_json::json!({ "not": "a history event" }));
+
+        let recovered = parse_history_leniently(serde_json::Value::Array(array));
+
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(
+            recovered
+                .iter()
+                .map(|e| e.break_id.clone())
+                .collect::<Vec<_>>(),
+            good.iter().map(|e| e.break_id.clone()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_non_array_history_value_reads_as_empty_rather_than_panicking() {
+        assert!(parse_history_leniently(serde_json::json!("not an array")).is_empty());
+        assert!(parse_history_leniently(serde_json::json!(null)).is_empty());
+        assert!(parse_history_leniently(serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn a_fully_valid_history_array_round_trips_unchanged() {
+        let good = synthetic_history(5);
+        let value = serde_json::to_value(&good).unwrap();
+
+        let recovered = parse_history_leniently(value);
+
+        assert_eq!(recovered.len(), good.len());
     }
 }

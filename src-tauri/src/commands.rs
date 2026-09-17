@@ -219,7 +219,7 @@ pub(crate) fn get_history(app: AppHandle) -> ApiResult<Vec<HistoryEvent>> {
     let store = app.store(history_store_name()).map_err(internal_error)?;
     Ok(store
         .get("history")
-        .and_then(|value| serde_json::from_value::<Vec<HistoryEvent>>(value).ok())
+        .map(crate::store::parse_history_leniently)
         .unwrap_or_default())
 }
 

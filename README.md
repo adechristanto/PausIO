@@ -31,7 +31,7 @@ Unlike aggressive break timers that interrupt you during presentations or video 
   - _Ask first_: Toast prompt with options to start now, postpone, or take a timed break.
   - _Direct overlay_: Dim the screen with an elegant countdown and eye exercise cues.
   - _Firm mode_: Strict focus enforcement with emergency override safeguards.
-- **Smart Context Deferrals**: Automatically delays breaks when you are actively presenting, in full screen, in Focus Assist mode, or during continuous typing bursts.
+- **Smart Context Deferrals**: Automatically delays breaks during continuous typing bursts everywhere, plus fullscreen detection on macOS/Windows and Focus Assist detection on Windows. You can also set a manual context (meeting, screen share, etc.) from Settings on any platform.
 - **Session & Idle Detection**: Pauses automatically when you step away from your computer; natural absences count towards your rest cycle.
 - **Every Device Works On Its Own**: Desktop, phone, and watch each run the full timer independently — no pairing, no companion app, no network. The phone schedules its own break reminders in advance, so they arrive even while the app is closed.
 - **Optional Wearable Companion**: Connect an Apple Watch (watchOS) or Wear OS companion from Settings for a private haptic wrist buzz, and choose whether breaks announce on your phone, your watch, or both. Off by default.
@@ -79,6 +79,15 @@ into the iOS and Android hosts.
 | **pnpm**    | `10.33.0`                                   | Monorepo package manager            |
 | **Java**    | `17`                                        | Android builds (optional)           |
 | **Xcode**   | `16+`                                       | iOS / Apple Watch builds (optional) |
+
+On Linux, a desktop build additionally needs the WebKitGTK and tray system libraries before `cargo`/`pnpm tauri` can link the app:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+(Package names are for Debian/Ubuntu; use your distribution's equivalents on Fedora, Arch, etc.)
 
 ### Quick Start
 

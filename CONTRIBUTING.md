@@ -23,7 +23,14 @@ PausIO is local-first and privacy-preserving. Contributions must not add:
 | Android SDK + NDK | NDK 28.2.13676358 | Required only for Android/Wear OS work                                   |
 | xcodegen          | latest            | Required only for iOS simulator builds (`brew install xcodegen`)         |
 
-A desktop-only build requires only Rust, Node, and pnpm.
+A desktop-only build requires only Rust, Node, and pnpm — except on Linux, which additionally needs the WebKitGTK/tray system libraries below before `cargo`/`pnpm tauri` can link the app:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+(Package names are for Debian/Ubuntu; use your distribution's equivalents on Fedora, Arch, etc.)
 
 ## First run
 

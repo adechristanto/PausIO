@@ -8,7 +8,7 @@ This document outlines the planned milestones and development directions for Pau
 
 - [x] **Core Engine Isolation**: Pure Rust state machine with 90%+ line coverage and deterministic countdown behavior.
 - [x] **Multi-Surface Break Delivery**: Tray controls, gentle/assertive screen-dimming overlays, and break warning prompts.
-- [x] **Smart Context Deferrals**: Aggregate OS idle/lock detection and fullscreen/Focus Assist deferrals on Windows and macOS.
+- [x] **Smart Context Deferrals**: Aggregate OS idle/lock detection on all desktop platforms, fullscreen deferrals on Windows and macOS, and Focus Assist deferrals on Windows (no public, permission-free Focus API exists on macOS).
 - [ ] **Linux Wayland Native Parity**:
   - Replace `loginctl` subprocess polling with native D-Bus session events via `zbus`.
   - Implement idle detection via `ext-idle-notify-v1` and logind signals.

@@ -52,6 +52,24 @@ describe('break decision prompt', () => {
     expect(document.activeElement).not.toBe(view.container.querySelector('.button-primary'))
   })
 
+  it('lets a keyboard-only user Tab to the Start button and activate it with Enter', async () => {
+    const onStart = vi.fn(async () => {})
+    const view = renderPrompt({ onStart })
+
+    const startBtn = view.container.querySelector<HTMLButtonElement>('.button-primary')!
+    startBtn.focus()
+    expect(document.activeElement).toBe(startBtn)
+
+    await fireEvent.keyDown(startBtn, { key: 'Enter' })
+    // jsdom does not synthesize the browser's native Enter-triggers-click
+    // behavior for keydown, so this asserts what matters here: the keydown
+    // was not intercepted/cancelled by the window-level blocker once focus
+    // is deliberately on a prompt control.
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    startBtn.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
   it('offers the long-break choice when a long break is due', () => {
     renderPrompt({
       state: { ...dueState, phase: { break_due: { kind: 'long' } } },
