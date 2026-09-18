@@ -47,11 +47,11 @@ DerivedData/
 *.apk
 
 # Agent / AI assistant local state and temporary caches
-.claude/settings.local.json
-.claude/worktrees/
+.claude/
 .kilo/
+.kilocode/
 .freebuff/
+.playwright-mcp/
 
 # Local scratch and tool artifacts
 test.html
-.playwright-mcp/
