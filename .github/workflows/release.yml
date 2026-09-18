@@ -160,7 +160,11 @@ jobs:
           toolchain: 1.93.0
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      # v4 is required: v3 defaults `packages` to "tools platform-tools", and
+      # the obsolete `tools` package no longer exists in Google's SDK
+      # repository, so sdkmanager exits 1 with "Failed to find package 'tools'".
+      # v4 drops it from the default, leaving just platform-tools.
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
       - run: sdkmanager "ndk;28.2.13676358"
       - run: pnpm install --frozen-lockfile
       - run: pnpm gen:mobile
