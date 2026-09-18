@@ -1,6 +1,7 @@
-# PausIO — Architecture
+# PausIO Architecture
 
-This document describes the repository as it exists. All paths, type names, and commands resolve in the tree.
+This document describes the current state of the codebase: crate layout, IPC surface, and
+the state-machine design behind the timer engine and desktop shell.
 
 ---
 
@@ -37,7 +38,7 @@ PausIO/
 ├── watch/
 │   ├── apple-watch/          # SwiftPM package — watchOS companion
 │   └── wear-os/              # Gradle project — Wear OS companion
-├── scripts/                  # Build helpers (mobile generation, iOS recovery)
+├── scripts/                  # Build helpers (mobile generation, iOS simulator build)
 ├── tests/                    # WebdriverIO E2E desktop suite
 └── docs/                     # This directory
 ```
@@ -48,7 +49,7 @@ PausIO/
 
 ### `crates/pausio-core` — timer engine
 
-The engine is a pure-Rust state machine with no dependency on Tauri, webviews, or any UI. Its public API surface is about 16 items: `TimerEngine`, `Settings`, `Snapshot`, `SessionCheckpoint`, `EngineEvent`, `EngineError`, and the presentational enums (`Locale`, `Strictness`, `Theme`, `Accent`, `DisplayTarget`, `BreakRoutine`, `SoundTheme`). The crate is split across `lib.rs` (public surface and re-exports), `engine.rs` (the `TimerEngine` state machine), `settings.rs` (`Settings` and validation), `types.rs` (`Snapshot`, `SessionCheckpoint`, and other plain data types), and `reminders.rs` (the phone's standalone reminder-plan projection, see "Standalone operation" below).
+The engine is a pure-Rust state machine with no dependency on Tauri, webviews, or any UI. Its public API surface is about 16 items: `TimerEngine`, `Settings`, `Snapshot`, `SessionCheckpoint`, `EngineEvent`, `EngineError`, and the presentational enums (`Locale`, `Strictness`, `Theme`, `Accent`, `DisplayTarget`, `BreakRoutine`, `SoundTiming`). The crate is split across `lib.rs` (public surface and re-exports), `engine.rs` (the `TimerEngine` state machine), `settings.rs` (`Settings` and validation), `types.rs` (`Snapshot`, `SessionCheckpoint`, and other plain data types), and `reminders.rs` (the phone's standalone reminder-plan projection, see "Standalone operation" below).
 
 The engine is the only component covered by the 90% line-coverage gate (`cargo llvm-cov -p pausio-core --lib --fail-under-lines 90`). Its determinism is the foundation the rest of the stack relies on.
 
@@ -194,13 +195,13 @@ Apple Watch communication is strictly iPhone-to-watch through WatchConnectivity.
 
 ### Scripts
 
-| Script                             | Role                                                                                                                                                                                                                                          |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/tauri.mjs`                | Node.js launcher: changes to `src-tauri/`, then delegates to the locally-installed `@tauri-apps/cli`. Used by `pnpm tauri`.                                                                                                                   |
-| `scripts/tauri.sh`                 | POSIX entry point for the same operation. Required by Xcode build phases and the Gradle `BuildTask.kt` patch (`scripts/patch-mobile-projects.sh:14,62`). Not a duplicate of `tauri.mjs` — removing it silently breaks iOS and Android builds. |
-| `scripts/generate-mobile.sh`       | Thin wrapper around `pnpm tauri ios init` + `pnpm tauri android init`.                                                                                                                                                                        |
-| `scripts/patch-mobile-projects.sh` | Idempotent patches for the generated iOS and Android projects: updates the Tauri entry point path and wires `tauri-plugin-eyecare`.                                                                                                           |
-| `scripts/build-ios-simulator.sh`   | Runs `xcodegen` and `xcodebuild` for the iOS simulator target.                                                                                                                                                                                |
+| Script                             | Role                                                                                                                                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scripts/tauri.mjs`                | Node.js launcher: changes to `src-tauri/`, then delegates to the locally-installed `@tauri-apps/cli`. Used by `pnpm tauri`.                                                                                                    |
+| `scripts/tauri.sh`                 | POSIX entry point for the same operation. Required by Xcode build phases and the Gradle `BuildTask.kt` patch in `scripts/patch-mobile-projects.sh`. Not a duplicate of `tauri.mjs`; removing it breaks iOS and Android builds. |
+| `scripts/generate-mobile.sh`       | Thin wrapper around `pnpm tauri ios init` + `pnpm tauri android init`.                                                                                                                                                         |
+| `scripts/patch-mobile-projects.sh` | Idempotent patches for the generated iOS and Android projects: updates the Tauri entry point path and wires `tauri-plugin-eyecare`.                                                                                            |
+| `scripts/build-ios-simulator.sh`   | Runs `xcodegen` and `xcodebuild` for the iOS simulator target.                                                                                                                                                                 |
 
 ---
 
@@ -219,29 +220,8 @@ In E2E mode (`--e2e`), both stores are prefixed with `pausio-e2e-` and the sessi
 
 ## Build
 
-```sh
-# Node + Cargo workspace
-pnpm install --frozen-lockfile
-
-# Desktop development
-pnpm tauri dev
-
-# Frontend only (type check + unit tests + bundle)
-pnpm check && pnpm test && pnpm build
-
-# Rust workspace (format + lint + unit tests + coverage)
-cargo fmt --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
-cargo llvm-cov -p pausio-core --lib --fail-under-lines 90 --summary-only
-
-# Watch companions
-(cd watch/apple-watch && swift test)
-./gradlew :wear:testDebugUnitTest   # from src-tauri/gen/android after pnpm gen:mobile
-
-# E2E
-pnpm test:e2e:desktop
-```
+See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the full set of build and verification
+commands per layer (frontend, Rust workspace, watch companions, and desktop E2E).
 
 Mobile host projects (`src-tauri/gen/`) are not committed. Generate them with `pnpm gen:mobile` on a machine with Xcode and Android SDK support.
 

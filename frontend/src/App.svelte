@@ -50,14 +50,15 @@
     | 'section_shortcuts'
     | 'section_history_privacy'
     | 'wearables_heading'
-  // Nine categories collapsed to five (plus mobile-only Wearables): Timing and
-  // Break delivery merged into Breaks, Sound moved in with it, auto-detect moved
-  // into Schedule (it answers the same question -- "when should you not interrupt
-  // me"), Autostart paired with Shortcuts, diagnostics moved into Privacy, the
-  // Profiles pane was retired in favour of the dashboard dropdown (profiles are a
-  // personal saved setup, not something that belongs in a settings tree someone
-  // is trying to learn), and "Temporarily quiet" left Settings entirely for the
-  // dashboard dock -- it changes runtime state, not a stored setting.
+  // Five categories, plus mobile-only Wearables. Timing, break delivery, and sound
+  // live together under Breaks. Auto-detect lives under Schedule, since it answers
+  // the same question as the rest of that section: "when should you not interrupt
+  // me". Autostart is paired with Shortcuts, and diagnostics live under Privacy.
+  // Saved profiles are not a settings category: they are a personal saved setup,
+  // surfaced from the dashboard dropdown instead of a settings tree someone is
+  // trying to learn. "Temporarily quiet" is not in Settings either, since it
+  // changes runtime state rather than a stored setting; it lives in the
+  // dashboard dock.
   const settingsCategories: { id: SettingsCategory; labelKey: SettingsLabelKey }[] = [
     { id: 'breaks', labelKey: 'section_breaks' },
     { id: 'schedule', labelKey: 'section_schedule' },

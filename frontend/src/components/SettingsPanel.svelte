@@ -208,18 +208,19 @@
   // Saving.../Saved indicator is the confirmation — no separate "applied" toast needed.
   const applyPresetTo = (id: (typeof PRESET_IDS)[number]) => editSettings(applyPreset(settings, id))
 
-  // active_at() (settings.rs:405) treats an equal start and end as always active. That
-  // is a real, useful "no scheduled hours" mode, but a person would have to notice two
-  // matching clock values to find it. Naming it turns a quirk into a feature.
+  // Settings::active_at (settings.rs) treats an equal start and end as always active.
+  // That is a real, useful "no scheduled hours" mode, but a person would have to notice
+  // two matching clock values to find it. Naming it turns a quirk into a feature.
   const roundTheClock = $derived(
     isRoundTheClock(settings.active_start_minutes, settings.active_end_minutes)
   )
   const toggleRoundTheClock = (checked: boolean) =>
     editSettings({ ...settings, ...roundTheClockPatch(checked) })
 
-  // A fixed break only fires while the phase is Working/PreBreak (engine.rs:350), which
-  // active hours gate independently of the day mask. One outside the window silently
-  // never happens; saying so before it's saved beats a feature that quietly does nothing.
+  // A fixed break only fires while the phase is Working/PreBreak (see the TimerEngine
+  // tick handling in engine.rs), which active hours gate independently of the day mask.
+  // One outside the window silently never happens; saying so before it's saved beats a
+  // feature that quietly does nothing.
   const offendingFixedBreaks = $derived(
     (settings.fixed_break_minutes ?? [])
       .filter(

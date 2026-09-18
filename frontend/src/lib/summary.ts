@@ -56,8 +56,8 @@ export function describeSettings(settings: Settings): string[] {
   if (days !== 0) {
     const dayLabel = describeDays(days, locale)
     sentences.push(
-      // active_at() treats equal start and end as always-on (settings.rs:404) —
-      // it looks like a zero-length window but means round the clock.
+      // Settings::active_at treats equal start and end as always-on: it looks like a
+      // zero-length window but means round the clock.
       settings.active_start_minutes === settings.active_end_minutes
         ? t('summary_schedule_all_day', { days: dayLabel })
         : t('summary_schedule', {

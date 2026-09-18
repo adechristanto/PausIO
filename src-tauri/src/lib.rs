@@ -13,7 +13,6 @@ mod sound_player;
 #[cfg(desktop)]
 mod tray_icon;
 
-// New focused modules — pure file moves, no logic changes.
 #[cfg(desktop)]
 pub(crate) mod break_windows;
 pub(crate) mod commands;

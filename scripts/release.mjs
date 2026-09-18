@@ -42,11 +42,10 @@ function readVersion(path) {
   return match[1]
 }
 
-// The original shell implementation of this (`tr '.' ' '` then
-// `IFS='.' read`) never actually worked: converting the dots to spaces
-// first leaves nothing for the following dot-delimited `read` to split on,
-// so it collapses the whole string into one field. Parse the three
-// numeric segments directly instead.
+// Parse the three numeric segments directly via regex rather than a shell-style
+// `tr '.' ' '` + `IFS='.' read` split: converting the dots to spaces first leaves
+// nothing for a dot-delimited read to split on, so that approach collapses the
+// whole string into one field.
 function bumpVersion(current, bumpType) {
   const match = current.match(/^(\d+)\.(\d+)\.(\d+)$/)
   if (!match) die(`Current version "${current}" is not a valid x.y.z semantic version.`)

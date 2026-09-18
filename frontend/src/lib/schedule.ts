@@ -1,5 +1,5 @@
 /**
- * Mirrors the time-of-day portion of `Settings::active_at` (settings.rs:405) so the
+ * Mirrors the time-of-day portion of `Settings::active_at` (in `settings.rs`) so the
  * UI can warn about a fixed break time before saving it, not after it silently never
  * fires. Deliberately excludes the day-of-week check: a fixed break is gated by
  * `active_days_mask` separately and independently of this clock-time window, so this

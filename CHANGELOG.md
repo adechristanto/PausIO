@@ -49,12 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI restructured: single macOS monolith split into `frontend`, `rust`, `swift`, `mobile-gen`, `e2e`, `ios`, `android` jobs; added `concurrency` cancellation, `Swatinem/rust-cache`, and push-trigger limited to `main`.
 - Split `src-tauri/src/lib.rs` (2,779 lines) into focused modules: `state`, `store`, `events`, `break_windows`, `main_window`, `tray_menu`, `commands`, and `platform/{macos,windows,linux}`. Pure file moves; no logic changes.
 - Corrected workspace `repository` metadata to `adechristanto/PausIO`; added `homepage` and `rust-version`.
-- Extended `.gitignore` for editor directories, log files, and agent local settings; fixed `.claude/launch.json` to use pnpm.
+- Extended `.gitignore` for editor directories, log files, and local tool state.
 
 ### Removed
 
 - Internal pre-implementation planning documents (`market-analysis.md`, `desktop-audit-and-freemium-playbook.md`, `prd.md`, `WEARABLES_CLOSED_BETA.md`, `M1_DECISIONS.md`, `Open-Source Release Preparation.md`).
-- Pre-implementation artifacts from `docs/`: six generated `.docx` exports, three degraded `.converted.md` round-trips, an agent workflow note, and raw research dumps (≈2.5 MB total).
+- Pre-implementation artifacts from `docs/`: six generated `.docx` exports, three degraded `.converted.md` round-trips, a workflow note, and raw research dumps (≈2.5 MB total).
 - `docs/developer-documentation.md`, which described an architecture the code does not have.
 
 ## [0.1.0] - 2026-08-02
@@ -72,5 +72,10 @@ Initial working state. Not yet distributed as a signed release.
 - Svelte 5 frontend with Vitest component tests and a WebdriverIO desktop E2E suite (gated behind the opt-in `e2e-webdriver` Cargo feature).
 - CI covering desktop bundles (Linux deb/appimage, Windows nsis/msi), Swift tests, Android lint/build, iOS simulator build, and byte-for-byte determinism of the mobile-host generator.
 
+<!--
+No `v0.1.0` tag or GitHub release exists yet, so this file intentionally omits
+compare/release links until the first tag is cut. Add them back at that point:
+
 [Unreleased]: https://github.com/adechristanto/PausIO/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/adechristanto/PausIO/releases/tag/v0.1.0
+-->

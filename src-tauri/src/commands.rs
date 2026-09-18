@@ -164,11 +164,10 @@ fn apply_settings_profile_blocking(app: &AppHandle, name: String) -> ApiResult<S
     }
     .ok_or_else(|| internal_error("save this profile before applying it"))?;
     // Applying a profile is an ordinary settings write and must take the ordinary
-    // path. This used to be a near-copy of `set_settings_blocking` that omitted
-    // `retranslate_tray` and `sync_global_shortcuts`, so a profile carrying a
-    // different locale or different accelerators left the tray in the old language
-    // and the old shortcuts still registered until the next unrelated save. It also
-    // never emitted `settings:changed`.
+    // path, not a shortcut that skips `retranslate_tray` or `sync_global_shortcuts`:
+    // a profile carrying a different locale or different accelerators has to update
+    // the tray language and re-register shortcuts immediately, and must emit
+    // `settings:changed` like any other save.
     set_settings_blocking(app, settings)
 }
 
@@ -590,10 +589,9 @@ pub(crate) fn get_desktop_health(
     #[cfg(not(desktop))]
     {
         let settings = lock_engine(&engine.0).settings().clone();
-        // Report the phone's real permission. It used to be hardcoded
-        // "unavailable", which was accurate when the phone posted nothing at
-        // all, but now hides the one failure that silences a standalone
-        // install entirely.
+        // Report the phone's actual OS notification permission, not a hardcoded
+        // value: a denied permission is the one failure that silences a standalone
+        // install entirely, and the health report must surface it.
         #[cfg(mobile)]
         let notification_permission = {
             use tauri_plugin_eyecare::EyecareExt;
@@ -666,10 +664,10 @@ pub(crate) fn test_reminder(app: AppHandle, engine: State<'_, EngineState>) -> A
         )
         .map_err(internal_error)
     }
-    // A phone must be able to prove its own delivery works, since a
-    // standalone install has no wearable to fall back on. This used to be a
-    // silent no-op, which made a broken setup indistinguishable from a
-    // working one.
+    // A phone must be able to prove its own delivery works, since a standalone
+    // install has no wearable to fall back on: this must return the real
+    // notification-permission result rather than silently succeeding, or a broken
+    // setup would be indistinguishable from a working one.
     #[cfg(mobile)]
     {
         use tauri_plugin_eyecare::EyecareExt;

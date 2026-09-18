@@ -4,10 +4,9 @@ import { describe, expect, it } from 'vitest'
 
 /**
  * WCAG 2.2 AA contrast sweep over every theme x accent combination the app can actually
- * render (Phase 1 acceptance criterion #8 of the UI/UX audit). Values are extracted directly
- * from styles.css rather than duplicated as literals here, so this fails the moment a future
- * edit reintroduces a token that can't be read, not just when someone remembers to re-run a
- * calculator by hand.
+ * render. Values are extracted directly from styles.css rather than duplicated as literals
+ * here, so this fails the moment a future edit reintroduces a token that can't be read, not
+ * just when someone remembers to re-run a calculator by hand.
  */
 
 const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')

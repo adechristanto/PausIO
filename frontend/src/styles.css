@@ -35,7 +35,7 @@
   --form: 640px;
   /* Shared minimum width for every trailing row control (stepper, select, shortcut
      recorder) so a "Kurze Pause" stepper and an "Aus" dropdown line up on the same
-     column instead of each shrink-wrapping to its own content (D-something polish pass). */
+     column instead of each shrink-wrapping to its own content. */
   --control-min: 184px;
   /* --accent-dark/--accent-dark-strong: the chosen accent's swatch, pinned to its dark-surface
      tuning regardless of the resolved app theme. The break overlay and pre-break prompt are
@@ -152,11 +152,12 @@
   --accent-dark: #a78ad9;
   --accent-dark-strong: #8869bd;
 }
-/* Light-mode accent overrides (E4): the three non-default accents had no light variant and
-   silently inherited their dark-tuned values, which fail contrast on a light canvas (focus
-   ring as low as 1.31:1). Higher specificity than the plain [data-accent] rules above, so
-   these win whenever the theme is explicitly light; the @media block below covers the
-   'system' theme case on a light OS, matching the plain rules' own specificity + source order. */
+/* Light-mode accent overrides: the three non-default accents have no light variant here,
+   they would otherwise inherit their dark-tuned values, which fail contrast on a light
+   canvas (focus ring as low as 1.31:1). Higher specificity than the plain [data-accent]
+   rules above, so these win whenever the theme is explicitly light; the @media block below
+   covers the 'system' theme case on a light OS, matching the plain rules' own specificity
+   and source order. */
 :root[data-theme='light'][data-accent='sage'] {
   --accent: #2f7a56;
   --accent-strong: #266b4a;
@@ -555,7 +556,7 @@ svg {
   outline-offset: -2px;
 }
 /* Settings sub-navigation: appears nested under the Settings destination once it's active,
-   so the settings groups become real sub-pages instead of one long scroll (E-ux1). */
+   so the settings groups become real sub-pages instead of one long scroll. */
 .settings-search {
   position: relative;
   margin-top: 14px;
@@ -1154,9 +1155,8 @@ svg {
 }
 /* The ring's tone follows the chosen accent theme end to end: focus is the plain accent, rest
    (an active break, shown inline on the dashboard) and paused/dormant lean on accent-strong for
-   a shade of visual difference without introducing an unrelated hue that ignores the theme —
-   previously "rest" was a fixed success-green and paused/dormant a hardcoded lilac, so picking
-   any other accent left those two states looking untouched by the choice. */
+   a shade of visual difference. A fixed hue for these states (e.g. a hardcoded success-green
+   or lilac) would ignore the chosen accent theme entirely for two of the four states. */
 .timer-focus {
   color: var(--accent);
 }
@@ -1293,8 +1293,8 @@ svg {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
-/* No dividers: the 1px --line borders this used to draw around each tile measured 1.32:1,
-   simultaneously boxy in structure and barely visible in practice (D7) — the gap alone is
+/* No dividers: a 1px --line border around each tile measures 1.32:1 contrast, which is
+   simultaneously boxy in structure and barely visible in practice. The gap alone is
    enough to separate two numbers this size. */
 .daily-summary {
   display: grid;
@@ -1327,8 +1327,8 @@ svg {
 
 /* Settings */
 /* No drop shadow: grouped content in a native macOS window is set off by a hairline, never
-   elevation — shadows here are what makes in-window cards read as a web page rather than a
-   system settings pane (E23). Shadows stay reserved for things that are genuinely floating:
+   elevation. A shadow here would make in-window cards read as a web page rather than a
+   system settings pane. Shadows stay reserved for things that are genuinely floating:
    the toast, the tooltip, and the pre-break prompt window. */
 .settings {
   display: grid;
@@ -1398,9 +1398,8 @@ svg {
   font-size: var(--font-size-caption);
   white-space: nowrap;
 }
-/* No drop shadow here either (E23) — main added the history_range picker (a variable number
-   of bars, so the chart moved from a fixed 7-col grid to flex) on top of the old shadowed
-   version; keep that flex layout but without the shadow. */
+/* No drop shadow here either, for the same reason as .settings above. The bar count varies
+   with the selected history range, so this uses a flex layout rather than a fixed grid. */
 .history-insights {
   margin: 0 0 1.25rem;
   padding: 1rem;
@@ -2853,9 +2852,9 @@ svg {
   transform: translate(-50%, -50%);
 }
 /* No hard px cap on card/ring/type below: at 1440x900 and at 2560x1440 the card must occupy
-   a comparable fraction of the viewport (B1) — a fixed max-px silently shrinks the "look
-   away" content to a small island on a large display. vmin-driven clamps with generous
-   ceilings replace the old low caps (620px card / 238px ring / 60px heading). */
+   a comparable fraction of the viewport. A fixed max-px would shrink the "look away"
+   content to a small island on a large display, so these use vmin-driven clamps with
+   generous ceilings instead. */
 .break-card {
   position: relative;
   z-index: 1;
@@ -3348,10 +3347,10 @@ svg {
   }
 }
 /* Reduce Motion replaces non-essential motion with a cross-fade rather than removing
-   feedback outright (PRD 7.1): the countdown ring keeps sweeping (it is continuous, not
-   oscillating, and is the one piece of motion the whole product exists to show you), and
-   colour/background cross-fades stay. Only transform-based motion — the button press scale,
-   the diagnostics chevron rotation, and the ring endpoint's positional travel — is removed. */
+   feedback outright: the countdown ring keeps sweeping (it is continuous, not oscillating,
+   and is the one piece of motion the whole product exists to show you), and colour/background
+   cross-fades stay. Only transform-based motion (the button press scale, the diagnostics
+   chevron rotation, and the ring endpoint's positional travel) is removed. */
 /* Premium phone treatment -------------------------------------------------
    The shared webview keeps the same information architecture on iOS and
    Android, but uses a compact, touch-first presentation on either platform.

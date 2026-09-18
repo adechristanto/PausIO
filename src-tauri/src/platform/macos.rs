@@ -1,7 +1,5 @@
-/// System-wide (HID) idle seconds via CoreGraphics — a public, permission-free
-/// API. Previously this forked `ioreg -c IOHIDSystem` on every 1-second tick
-/// (~86,400 process spawns/day just for an idle check); this reads the same
-/// idle counter in-process with no subprocess and no IPC.
+/// System-wide (HID) idle seconds via CoreGraphics: a public, permission-free API
+/// that reads the idle counter in-process, with no subprocess spawn and no IPC.
 pub(crate) fn platform_idle_seconds() -> Option<u32> {
     #[link(name = "CoreGraphics", kind = "framework")]
     unsafe extern "C" {

@@ -1,4 +1,4 @@
-/** Stable English localization keys for M1. Other locales can add a catalogue without changing UI code. */
+/** Stable English localization keys. Other locales can add a catalogue without changing UI code. */
 import { getActiveLocale, setActiveLocale } from './locale.svelte'
 import type { Locale, PauseReason, WatchStatus } from './types'
 

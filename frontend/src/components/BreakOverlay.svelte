@@ -8,9 +8,10 @@
   import type { Settings, Snapshot } from '../lib/types'
 
   // A full-screen slam to near-black is the one thing worse for a photosensitive user than a
-  // fade-in — so this is a plain CSS opacity transition (shortened, not skipped, under Reduce
-  // Motion by .break-overlay's own rule in styles.css) rather than removed outright, per the
-  // PRD's "Reduce Motion replaces slides/blurs with cross-fades", not "removes them".
+  // fade-in, so this is a plain CSS opacity transition. Reduce Motion (see .break-overlay in
+  // styles.css) shortens it rather than skipping it outright, consistent with this app's
+  // general Reduce Motion approach of cross-fading non-essential motion instead of removing
+  // all feedback.
   let entered = $state(false)
   let overlayElement: HTMLElement | undefined
   onMount(() => {
@@ -103,7 +104,8 @@
   let announcement = $state('')
   let announcedAt = -1
 
-  // FR-903: announce at start, at the halfway mark, and at the end. Never per tick.
+  // Screen-reader announcement: only at start, at the halfway mark, and at the end.
+  // Announcing every tick would make the countdown unusable with a screen reader.
   $effect(() => {
     if (!primary || !snapshot) return
     const left = snapshot.remaining_seconds

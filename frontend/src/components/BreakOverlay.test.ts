@@ -114,12 +114,12 @@ describe('break overlay', () => {
   })
 
   it('advances the guided reset throughout a whole long break, instead of freezing on step 4 after 20s, when explicitly chosen', () => {
-    // Guided is no longer the default (see far-gaze tests above), but remains fully
-    // available as an explicit choice, and its own multi-step pacing must still work.
+    // Guided is not the default (see far-gaze tests above), but is fully available
+    // as an explicit choice, and its own multi-step pacing must still work.
     const guidedSettings: Settings = { ...settings, break_routine: 'guided' }
-    // 300s long break: at 20s elapsed the fixed-5s-per-step cadence this replaces would
-    // already be on the last step, frozen there for the remaining 4m40s. Proportional
-    // pacing (300s / 4 steps = 75s/step) should still be on step 1.
+    // 300s long break: pacing is proportional (300s / 4 steps = 75s/step), so at
+    // 20s elapsed this should still be on step 1, not on the last step as a fixed
+    // 5s-per-step cadence would produce.
     const early: Snapshot = {
       phase: { breaking: { kind: 'long' } },
       remaining_seconds: 280,
