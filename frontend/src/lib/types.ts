@@ -32,7 +32,7 @@ export interface Settings {
   active_start_minutes: number
   active_end_minutes: number
   postpone_limit: number | null
-  /** Optional during the rolling upgrade from M1 clients. */ strictness?: Strictness
+  /** Optional for backward compatibility with settings persisted by older versions. */ strictness?: Strictness
   theme?: Theme
   accent?: Accent
   locale?: Locale
@@ -67,7 +67,7 @@ export interface Snapshot {
   remaining_seconds: number
   completed_short_breaks: number
   postpones_today: number
-  /** Optional during the rolling upgrade from M1 clients. */ context?: ContextReason | null
+  /** Optional for backward compatibility with snapshots emitted by older versions. */ context?: ContextReason | null
   context_expires_at?: string | null
   paused_until?: string | null
 }

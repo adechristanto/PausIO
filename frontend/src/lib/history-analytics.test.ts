@@ -167,7 +167,7 @@ describe('analyzeHistory', () => {
     expect(analytics.today).toMatchObject({ due: 1, completed: 1, percent: 100 })
   })
 
-  it('reports percent against resolved breaks, not all due breaks -- fixing the "25%" vs "1 of 1 resolved" mismatch', () => {
+  it('reports percent against resolved breaks, not all due breaks, so it never disagrees with the adjacent "N of M resolved" copy', () => {
     const analytics = analyzeHistory(
       [
         { ...at('2026-07-26', 'due'), break_id: 'resolved-1' },

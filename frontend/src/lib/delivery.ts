@@ -4,7 +4,7 @@ import type { DisplayTarget, Settings, Strictness } from './types'
  * `strictness` and `display_target` are stored as two independent fields, but the
  * engine does not honour them independently:
  *
- * - `due_grace_seconds` (`crates/pausio-core/src/engine.rs:29`) returns early with
+ * - `due_grace_seconds` (`crates/pausio-core/src/engine.rs`) returns early with
  *   Gentle's 180 s grace whenever `display_target` is `notification_only`, throwing
  *   away the chosen strictness.
  * - `events.rs` raises no overlay when strictness is `gentle` **or** the target is

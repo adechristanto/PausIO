@@ -5,7 +5,7 @@ import { pauseLabel, setLocale, t, tCount } from './i18n'
 
 afterEach(() => setLocale('en'))
 
-describe('M1 localization and accessibility baseline', () => {
+describe('localization and accessibility baseline', () => {
   it('uses stable keys and interpolates English values', () => {
     expect(t('action_take_break')).toBe('Eye break now')
     expect(t('break_postpone')).toBe('Postpone 2 min')

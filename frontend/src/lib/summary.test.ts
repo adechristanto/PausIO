@@ -31,7 +31,7 @@ describe('describeSettings', () => {
   })
 
   it('reads an equal start and end as round the clock, not a zero-length window', () => {
-    // active_at() returns true unconditionally when the two are equal (settings.rs:404).
+    // Settings::active_at returns true unconditionally when the two are equal.
     const text = say({ active_start_minutes: 600, active_end_minutes: 600 })
     expect(text).toContain('Active Mon–Fri, around the clock.')
     expect(text).not.toContain('until')
