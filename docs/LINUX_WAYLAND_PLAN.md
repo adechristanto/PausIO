@@ -1,10 +1,22 @@
 # Linux/Wayland parity — implementation spec
 
-**Status:** Not implemented. Written as an executable spec for the next session with a real Linux build environment (this session ran on macOS with no GTK/webkit2gtk cross-compilation sysroot available — `cargo check --target x86_64-unknown-linux-gnu` fails on `gobject-sys`/`gio-sys`/`pango-sys`/`cairo-sys-rs` build scripts needing `pkg-config` against target libraries that don't exist on this host). Shipping the FFI/D-Bus code below without any compile feedback loop was judged too risky — a wrong type parameter or session-bus call shape can crash the native process, which is worse than not having the feature. Everything here is designed to the point where implementation is mechanical, not exploratory.
+**Status:** Not implemented. This is an executable spec for a contributor with a
+real Linux build environment. Authoring this plan on a machine without a
+GTK/WebKitGTK cross-compilation sysroot ruled out validating the FFI/D-Bus
+code against a real compiler feedback loop (`cargo check --target
+x86_64-unknown-linux-gnu` fails on the `gobject-sys`/`gio-sys`/`pango-sys`/`cairo-sys-rs`
+build scripts, which need `pkg-config` against target libraries that don't
+exist cross-platform). Shipping the FFI/D-Bus code below without that feedback
+loop would be risky — a wrong type parameter or session-bus call shape can
+crash the native process, which is worse than not having the feature.
+Everything here is designed to the point where implementation should be
+mechanical, not exploratory; each open question is called out explicitly so a
+Linux-equipped contributor can resolve it against a real session bus rather
+than guessing.
 
 ## 1. Idle detection via `ext-idle-notify-v1` (Wayland) / logind D-Bus (both)
 
-**Current state** (`src-tauri/src/lib.rs`, `platform_idle_seconds` under `#[cfg(target_os = "linux")]`): shells out to `loginctl show-session --property=IdleHint --property=IdleSinceHintMonotonic` once a second. Works, but is a subprocess spawn every tick and requires `XDG_SESSION_ID`.
+**Current state** (`src-tauri/src/platform/linux.rs`, `platform_idle_seconds`): shells out to `loginctl show-session --property=IdleHint --property=IdleSinceHintMonotonic` once a second (via the cached `loginctl_cached` helper in the same file). Works, but is a subprocess spawn every tick and requires `XDG_SESSION_ID`.
 
 **Target:** Replace the subprocess with a D-Bus session bus connection via the [`zbus`](https://crates.io/crates/zbus) crate (pure Rust, no libdbus dependency — safer to add than the GTK-family crates that block cross-compilation here).
 
@@ -32,11 +44,11 @@ For compositors that don't run logind (rare, but some minimal setups), or as the
 
 ## 2. Lock/unlock via logind D-Bus signals
 
-**Current state:** `platform_session_locked()` polls `loginctl show-session --property=LockedHint` once a second; `session_monitor::install` is an empty no-op on Linux (`session_monitor.rs`), unlike the real `NSWorkspace` observers on macOS and `WTSRegisterSessionNotification` on Windows.
+**Current state:** `platform_session_locked()` (`src-tauri/src/platform/linux.rs`) polls `loginctl show-session --property=LockedHint` once a second via the same `loginctl_cached` helper, and `sync_linux_session_lock` (same file) diffs that against `SessionLockState` on each poll to raise `Locked`/`Unlocked` events. This already works, but is poll-driven rather than event-driven, unlike the real `NSWorkspace` observers on macOS and `WTSRegisterSessionNotification` on Windows (`src-tauri/src/session_monitor.rs`).
 
-**Target:** Subscribe to the same `org.freedesktop.login1.Session` proxy's `Lock` and `Unlock` **signals** (not properties — logind emits these as distinct D-Bus signals, separate from the `LockedHint` property) via zbus. This is what should populate `session_monitor::install` on Linux for the first time, matching the event-driven pattern already used on macOS/Windows instead of polling.
+**Target:** Subscribe to the same `org.freedesktop.login1.Session` proxy's `Lock` and `Unlock` **signals** (not properties — logind emits these as distinct D-Bus signals, separate from the `LockedHint` property) via zbus, replacing the poll in `sync_linux_session_lock` with a signal handler.
 
-- `session_monitor::SessionEvent::Locked` / `Unlocked` (already defined, used by macOS/Windows) should be emitted from the signal handler, reusing the exact same `handle_session_event` dispatch already in `src-tauri/src/lib.rs`.
+- `session_monitor::SessionEvent::Locked` / `Unlocked` (already defined, used by macOS/Windows) should be emitted from the signal handler, reusing the exact same `handle_session_event` dispatch already used today.
 - This removes the 1 Hz `loginctl` poll for lock state entirely once wired, and is more correct: signal-driven lock detection can't miss a lock/unlock that happens to fall between two 1-second polls (unlikely to matter in practice, but the event-driven form is strictly more correct and is also the pattern this codebase already uses everywhere else).
 
 ## 3. Overlay hardening on Wayland (`harden_break_overlay` is currently a no-op on Linux)
@@ -48,16 +60,16 @@ This is the **highest-risk, highest-uncertainty** item — do not attempt withou
 - **GNOME Mutter Wayland:** does **not** implement `wlr-layer-shell` (it's a wlroots-ecosystem protocol; GNOME deliberately doesn't support it). On GNOME Wayland there is no known way to force a window above all others short of the same limitations every other app has — the honest fallback is: keep `always_on_top` (best-effort, may not survive focus changes) and report this specific gap in the health report (`overlay_hardening_supported: false` when compositor is detected as GNOME Wayland — detectable via `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE` env vars, no permission needed to read those).
 - **Compositor detection helper** (safe, testable, no FFI): a pure function `fn desktop_environment() -> (compositor: &str, session_type: &str)` reading `XDG_CURRENT_DESKTOP` / `XDG_SESSION_TYPE`, so the shell can choose X11 vs layer-shell vs "unsupported, report honestly" without any native calls. Write and unit-test this function **first**, independent of everything else — it's pure string parsing and needs no Linux machine to verify.
 
-## 4. Suggested implementation order for the next session
+## 4. Suggested implementation order
 
-1. Compositor/session-type detection helper (pure function, testable anywhere, no Linux needed to write correctly — do this even before setting up a Linux dev box).
-2. logind D-Bus idle + lock/unlock via zbus (covers X11 and Wayland uniformly, replaces both remaining `loginctl` polls, removes the biggest reliability complaint in the audit).
+1. Compositor/session-type detection helper (pure function, testable anywhere, no Linux machine needed to write correctly — start here even before setting up a Linux dev box).
+2. logind D-Bus idle + lock/unlock via zbus (covers X11 and Wayland uniformly, replaces both remaining `loginctl` polls, removes the biggest reliability gap versus macOS/Windows).
 3. X11 `_NET_WM_STATE_ABOVE` overlay hardening fallback (if `always_on_top` proves insufficient in testing).
 4. `gtk-layer-shell` overlay for wlroots/KDE.
 5. GNOME Wayland: document as unsupported, surface in health report, do not attempt a workaround.
 6. New CI job: headless `sway` (wlroots reference compositor) via `Xvfb`-equivalent for Wayland, to actually exercise 2–4 in CI rather than relying on manual testing alone.
 
-## 5. What this session did instead
+## 5. Current Linux behavior (baseline, unchanged by this spec)
 
-- Left `platform_idle_seconds`/`platform_session_locked`/`harden_break_overlay` on Linux exactly as they were (working, subprocess/poll-based, no regression).
-- Added the cross-platform `auto_detect_fullscreen` / `auto_detect_do_not_disturb` Settings toggles and the `platform_context_signal()` abstraction with a real Windows implementation; Linux's `platform_context_signal()` is a documented `None`-returning stub, exactly like `harden_break_overlay`'s existing Linux no-op — consistent with how this codebase already represents "not yet supported on this platform" rather than a fake success.
+- `platform_idle_seconds` / `platform_session_locked` / `harden_break_overlay` (`src-tauri/src/platform/linux.rs`) work today via the `loginctl` subprocess/poll approach described above; this spec proposes replacing them, not fixing a regression.
+- `platform_context_signal()` on Linux (`src-tauri/src/platform/linux.rs`) is a documented `None`-returning stub — no portable, permission-free fullscreen/Do-Not-Disturb signal exists across desktop environments (X11 vs Wayland, GNOME vs KDE vs wlroots), so this is reported honestly in the desktop health report rather than faked. macOS and Windows (`src-tauri/src/platform/macos.rs`, `src-tauri/src/platform/windows.rs`) implement the equivalent signal natively.

@@ -6,7 +6,7 @@ authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-license = "GPL-3.0-only"
+license.workspace = true
 description = "PausIO desktop and mobile application"
 publish = false
 

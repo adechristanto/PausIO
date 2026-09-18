@@ -106,7 +106,7 @@ jobs:
           shasum src-tauri/gen/apple/project.yml src-tauri/gen/android/settings.gradle src-tauri/gen/android/buildSrc/src/main/java/com/pausio/app/kotlin/BuildTask.kt > /tmp/pausio-mobile-second.sha
           diff -u /tmp/pausio-mobile-first.sha /tmp/pausio-mobile-second.sha
 
-  # ── Desktop platform installers (Linux deb/appimage, Windows nsis/msi) ──
+  # ── Desktop platform installers (Linux deb/appimage, Windows nsis/msi, macOS app/dmg) ──
   desktop-platform-builds:
     name: Desktop build (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -121,6 +121,9 @@ jobs:
           - name: Windows
             os: windows-2025
             bundle: nsis,msi
+          - name: macOS
+            os: macos-14
+            bundle: app,dmg
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
