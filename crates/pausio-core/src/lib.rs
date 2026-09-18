@@ -542,10 +542,9 @@ mod tests {
                 .any(|event| matches!(event, EngineEvent::Started(BreakKind::Short)))
         );
     }
-    /// Firm and Strict advertise a fullscreen reminder. Waiting for someone to
-    /// acknowledge a notification first contradicts that, and — when the OS
-    /// refuses to deliver the notification at all — used to mean the break
-    /// simply never happened.
+    /// Firm and Strict advertise a fullscreen reminder, so a due break must start
+    /// on its own rather than waiting for a notification to be acknowledged: if the
+    /// OS refuses to deliver the notification at all, the break must still happen.
     #[test]
     fn assertive_delivery_starts_a_due_break_without_waiting_to_be_acknowledged() {
         for strictness in [Strictness::Firm, Strictness::Strict] {
@@ -1248,12 +1247,11 @@ mod tests {
             }
         ));
     }
-    /// The daily focus limit used to be a one-way door: it parked the phase in
-    /// `Paused { DailyLimit }`, `rollover_day` cleared `work_seconds_today` but left
-    /// the phase alone, and every other route back (`activity_resumed`,
-    /// `paused_until`, `start_session`, `take_break_now`) was either gated on a
-    /// different reason or on a phase that was no longer reachable. Hitting the limit
-    /// once therefore stopped every following day too.
+    /// The daily focus limit parks the phase in `Paused { DailyLimit }`, and a day
+    /// rollover must release it: `activity_resumed`, `paused_until`, `start_session`,
+    /// and `take_break_now` are each gated on a different reason or phase, so none of
+    /// them can release this specific pause. `rollover_day` clearing
+    /// `work_seconds_today` is the only path back to `Working`.
     #[test]
     fn daily_focus_limit_releases_on_the_next_local_day() {
         let now = active_now();
@@ -1386,10 +1384,9 @@ mod tests {
         assert_eq!(e.posture_remaining, Some(25 * 60));
     }
 
-    /// Shortening the work interval mid-interval used to have no effect until the
-    /// break already in flight finished, so asking for a shorter day kept running
-    /// on the longer one. Lengthening it is deliberately left alone -- see the
-    /// comment at the call site in `replace_settings`.
+    /// Shortening the work interval must take effect on the interval already in
+    /// progress, not only on the next one. Lengthening it is deliberately left
+    /// alone; see the comment at the call site in `replace_settings`.
     #[test]
     fn shortening_the_interval_mid_interval_clamps_the_countdown_down() {
         let now = active_now();
@@ -1514,9 +1511,9 @@ mod tests {
                 .any(|event| matches!(event, EngineEvent::Due(_)))
         );
     }
-    // Proof of the review finding at engine.rs:624-631: the two exit paths
-    // from a `BreakDue`-origin timed pause diverge. Expiry resurfaces the due
-    // break; an early manual `resume()` discards it entirely.
+    // The two exit paths from a `BreakDue`-origin timed pause diverge (see
+    // `pause_for` and `resume` in engine.rs): expiry resurfaces the due break,
+    // but an early manual `resume()` discards it entirely.
     #[test]
     fn early_resume_from_a_due_break_pause_discards_the_due_break() {
         let mut e = engine();

@@ -282,23 +282,22 @@ impl TimerEngine {
         now: DateTime<Local>,
     ) -> Result<Vec<EngineEvent>, EngineError> {
         settings.validate()?;
-        // A nudge countdown has to survive a save that did not touch it. These were
-        // recomputed from scratch on every write, so changing an accent colour — or
-        // simply sitting in Settings with autosave running — restarted all three.
-        // With the blink interval at ten minutes, ten minutes of adjusting settings
-        // meant the nudge never arrived at all.
+        // A nudge countdown must survive a settings save that did not touch it: an
+        // unrelated edit, such as changing the accent colour, must not restart the
+        // blink/posture/hydration timers. Only the nudge intervals that actually
+        // changed are re-armed below; see the `previous_nudges` comparison further
+        // down this function.
         let previous_nudges = (
             self.settings.blink_nudge_minutes,
             self.settings.posture_nudge_minutes,
             self.settings.hydration_nudge_minutes,
         );
-        // Shortening "time between breaks" mid-interval used to have no effect
-        // until the break that was already running finished -- someone who just
-        // asked for a shorter workday kept waiting on the interval they had before
-        // they asked. Lengthening it is left alone: the current countdown keeps
-        // the deadline it already promised, and the longer interval simply starts
-        // applying from the next one, which is the least surprising direction to
-        // err in and needs no special handling here.
+        // Shortening "time between breaks" mid-interval must take effect on the
+        // interval already in progress, not only on the next one, so the clamp below
+        // recomputes `self.remaining` immediately. Lengthening it is left alone: the
+        // current countdown keeps the deadline it already promised, and the longer
+        // interval starts applying from the next one, which needs no special
+        // handling here.
         let previous_work_seconds = self.settings.work_seconds;
         let mid_interval = matches!(self.phase, TimerPhase::Working | TimerPhase::PreBreak);
         self.settings = settings;
@@ -350,15 +349,13 @@ impl TimerEngine {
     }
     pub fn advance(&mut self, seconds: u32, now: DateTime<Local>) -> Vec<EngineEvent> {
         let new_day = self.rollover_day(now);
-        // Reaching the daily focus limit parks the phase in `Paused { DailyLimit }`,
-        // and nothing used to bring it back: the guard further down early-returns
-        // for every phase outside Working/PreBreak/Breaking, `activity_resumed`
-        // un-pauses only Idle and Sleep, `paused_until` is never set for this
-        // reason, and both `start_session` and `take_break_now` require phases that
-        // are no longer reachable. Resetting `work_seconds_today` on rollover was
-        // therefore not enough — one day at the limit silently stopped every day
-        // after it, until somebody noticed and pressed Resume by hand. A new day
-        // has a fresh allowance, so the pause has to end with it.
+        // Reaching the daily focus limit parks the phase in `Paused { DailyLimit }`.
+        // A day rollover must end that pause here, because nothing else does:
+        // `activity_resumed` only un-pauses Idle and Sleep, `paused_until` is never
+        // set for this reason, and `start_session`/`take_break_now` both require
+        // phases this pause has already left. A new day has a fresh allowance, so
+        // the pause has to end with it, in the same rollover that resets
+        // `work_seconds_today`.
         if new_day
             && matches!(
                 self.phase,

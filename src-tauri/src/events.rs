@@ -313,11 +313,10 @@ fn show_nudge(app: &AppHandle, settings: &Settings, nudge: &str, title: &str, bo
     }
 }
 
-/// Sends the once-a-second countdown only to windows someone can actually
-/// see. Previously every webview — including a hidden main window tucked
-/// away in the tray — was invalidated every second forever; break-prompt and
-/// break-overlay windows always receive ticks since they only exist for the
-/// duration of an actual break.
+/// Sends the once-a-second countdown only to windows someone can actually see,
+/// so a hidden main window tucked away in the tray is not invalidated every
+/// second forever. Break-prompt and break-overlay windows always receive ticks
+/// since they only exist for the duration of an actual break.
 pub(crate) fn emit_tick(app: &AppHandle, remaining: u32) {
     #[cfg(desktop)]
     {
@@ -451,12 +450,11 @@ pub(crate) fn emit(app: &AppHandle, events: Vec<EngineEvent>, view: &EngineView)
                         if view.settings.strictness == Strictness::Balanced {
                             // Balanced asks through PausIO's own prompt: a
                             // bottom-right window that stays until it is
-                            // answered, on every platform. The actionable OS
-                            // notification it replaced could be dismissed,
-                            // silenced, or never delivered at all — and the
-                            // engine's due state now waits for the answer
-                            // rather than timing out, so the surface has to
-                            // be one that cannot vanish. A plain notification
+                            // answered, on every platform. An OS notification
+                            // can be dismissed, silenced, or never delivered at
+                            // all, and the engine's due state waits for the
+                            // answer rather than timing out, so the surface has
+                            // to be one that cannot vanish. A plain notification
                             // is the last resort if the window cannot be
                             // built at all.
                             if show_break_prompt(app, locale) {

@@ -12,17 +12,16 @@ pub(crate) enum SessionEvent {
 /// `NSWorkspaceSessionDidResignActive` fires when the *user session* switches
 /// out — fast user switching. Apple's own documentation describes it that way,
 /// and it does **not** fire when the screen locks with the same user still
-/// logged in. Observing only that notification is why the screen-lock rewind
-/// never ran on macOS: `handle_session_event(Locked)` was simply never reached
-/// for an ordinary Ctrl+Cmd+Q.
+/// logged in, so it cannot be the only signal used for `handle_session_event(Locked)`:
+/// relying on it alone would miss an ordinary Ctrl+Cmd+Q lock entirely.
 ///
 /// `com.apple.screenIsLocked` is the actual screen-lock signal, delivered on the
 /// *distributed* notification center rather than the workspace one. It is not
 /// part of Apple's published API surface, but it has been stable since OS X 10.9
 /// and needs no entitlement — PausIO is not sandboxed (`entitlements.plist`
 /// grants nothing; the hardened runtime alone does not block distributed
-/// notifications). If Apple ever stops posting it, the failure is silent and
-/// degrades to the previous behaviour: the countdown just does not rewind.
+/// notifications). If Apple ever stops posting it, the failure is silent: the
+/// countdown simply does not rewind for a lock, with no error surfaced.
 ///
 /// Both are kept. Overlapping delivery is already safe: `begin_lock` returns
 /// `false` when a lock is in flight and `finish_unlock` returns `None` when one

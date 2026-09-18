@@ -1,11 +1,10 @@
 //! A small, mostly-transparent white eye glyph for the menu-bar/tray icon.
 //!
-//! The tray previously used the full-color app icon directly as the icon, marked
-//! as a macOS "template" image (`icon_as_template(true)`). Template mode
-//! discards color entirely and uses only the alpha channel as a silhouette —
-//! and that icon's backdrop is roughly 77% opaque, so the result was a solid
-//! black blob (the "black dot" reported in the menu bar), not a recognizable
-//! mark.
+//! Do not render this as a macOS "template" image (`icon_as_template(true)`) using
+//! the full-color app icon as source: template mode discards color entirely and
+//! uses only the alpha channel as a silhouette, and the app icon's backdrop is
+//! roughly 77% opaque, which renders as a solid black blob rather than a
+//! recognizable mark.
 //!
 //! This renders a proper glyph instead: an eye outline with a pupil, matching
 //! the motif already used for the dashboard's eye-break button icon
@@ -16,11 +15,9 @@
 //! deliberately off: the icon must read as PausIO's own mark, not follow the
 //! system theme's recoloring.
 //!
-//! Deliberately a single static shape, not a per-state animation: an earlier
-//! attempt at procedurally-rendered, per-state tray icons was tried and
-//! reverted (see git history) because cycling shapes read as an unbranded
-//! dot rather than a recognizable mark. One legible glyph, always the same,
-//! is the right trade-off here.
+//! Deliberately a single static shape, not a per-state animation: cycling shapes
+//! reads as an unbranded dot rather than a recognizable mark. One legible glyph,
+//! always the same, is the right trade-off here.
 
 use tauri::image::Image;
 

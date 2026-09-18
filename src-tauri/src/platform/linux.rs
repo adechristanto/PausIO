@@ -54,10 +54,10 @@ pub(crate) struct LoginctlSample {
 #[cfg(target_os = "linux")]
 pub(crate) static LOGINCTL_CACHE: Mutex<Option<LoginctlSample>> = Mutex::new(None);
 
-/// Trade-off: lock/unlock detection can lag by up to this long on Linux
-/// (previously instantaneous, at the cost of two `loginctl` process spawns
-/// every second). Acceptable given the 5-minute idle-pause threshold and
-/// that locks typically last minutes, not seconds.
+/// Trade-off: lock/unlock detection can lag by up to this long on Linux, in
+/// exchange for avoiding two `loginctl` process spawns every second. Acceptable
+/// given the 5-minute idle-pause threshold and that locks typically last minutes,
+/// not seconds.
 #[cfg(target_os = "linux")]
 pub(crate) const LOGINCTL_POLL_INTERVAL: Duration = Duration::from_secs(10);
 

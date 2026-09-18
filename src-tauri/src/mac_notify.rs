@@ -140,10 +140,10 @@ pub(crate) fn refresh() {
 
 /// Queues a plain notification and returns immediately.
 ///
-/// The return value is the *cached* capability, not the outcome of this post —
-/// there is no non-blocking way to learn the latter, and waiting for it is what
-/// used to freeze the timer. Callers use it only to decide whether PausIO needs
-/// to show one of its own surfaces as well.
+/// The return value is the *cached* capability, not the outcome of this post:
+/// there is no non-blocking way to learn the latter, and waiting for it would
+/// block the tick loop on the timer's own mutex. Callers use it only to decide
+/// whether PausIO needs to show one of its own surfaces as well.
 pub(crate) fn post(title: &str, body: &str) -> Capability {
     let state = capability();
     // Post even when the cache says it will not be seen: a Notification Center

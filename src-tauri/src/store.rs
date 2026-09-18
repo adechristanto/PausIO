@@ -383,8 +383,7 @@ mod tests {
             .collect()
     }
 
-    /// Not a correctness test -- a recorded timing, per the product audit's
-    /// "benchmark before optimizing" guidance: `append_history` currently does
+    /// Not a correctness test -- a recorded timing. `append_history` currently does
     /// a full in-memory load/extend/retain/drain/rewrite on every append, up to
     /// `HISTORY_LIMIT` (50,000) events. This exercises that pipeline (minus the
     /// Tauri store I/O itself) at the cap and asserts it stays comfortably
@@ -418,7 +417,7 @@ mod tests {
             elapsed < std::time::Duration::from_millis(2500),
             "the deserialize/append/retain/cap/reserialize round trip took {elapsed:?} at \
              the {HISTORY_LIMIT}-event cap -- investigate before assuming pagination is \
-             needed, per the audit's own guidance not to optimize speculatively"
+             needed; do not optimize speculatively without a measurement like this one"
         );
     }
 
