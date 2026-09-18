@@ -40,7 +40,7 @@ Two viable paths — pick one:
    "plugins": {
      "updater": {
        "pubkey": "<public key from step 1>",
-       "endpoints": ["https://github.com/<org>/<repo>/releases/latest/download/latest.json"]
+       "endpoints": ["https://github.com/adechristanto/PausIO/releases/latest/download/latest.json"]
      }
    },
    "bundle": { "createUpdaterArtifacts": true }

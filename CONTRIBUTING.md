@@ -151,4 +151,4 @@ The following are deliberately out of scope:
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Enforcement contact: [@adechristanto](https://github.com/adechristanto).
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Enforcement contact: [@adechristanto](https://github.com/adechristanto) — <conduct@adechristanto.de>.

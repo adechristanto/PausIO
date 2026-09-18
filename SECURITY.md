@@ -20,6 +20,8 @@ The `e2e-webdriver` Cargo feature compiles in an unauthenticated localhost WebDr
 
 Please use [GitHub private vulnerability reporting](https://github.com/adechristanto/PausIO/security/advisories/new) to report security issues. This keeps the report confidential while it is being assessed.
 
+If you cannot use GitHub private vulnerability reporting — for example, if you do not have a GitHub account — email **security@adechristanto.de** instead.
+
 Do not open a public GitHub issue for a security vulnerability.
 
 **What to include:**

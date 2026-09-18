@@ -71,7 +71,7 @@ vi.mock('./lib/pausio', () => ({ api: apiMock }))
 const findClock = (clock: string) =>
   screen.findByText((_, element) => element?.textContent === clock && element?.tagName === 'STRONG')
 
-describe('Quiet Horizon app experience', () => {
+describe('PausIO app experience', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMock.getState.mockResolvedValue({ ...snapshot })

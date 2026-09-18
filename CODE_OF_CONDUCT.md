@@ -61,7 +61,13 @@ representative at an online or offline event.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leader responsible for enforcement:
 
-**@adechristanto** via [GitHub](https://github.com/adechristanto)
+**@adechristanto** — email **conduct@adechristanto.de**
+
+Reports sent to that address are read only by the maintainer responsible for
+enforcement. If you prefer not to email, you may instead open a
+[private security advisory](https://github.com/adechristanto/PausIO/security/advisories/new),
+which is also confidential, and note that it concerns conduct rather than a
+vulnerability.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

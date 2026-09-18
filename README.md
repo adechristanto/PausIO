@@ -40,6 +40,25 @@ Unlike aggressive break timers that interrupt you during presentations or video 
 
 ---
 
+## 📱 Screenshots
+
+The mobile and wearable companions are engineering previews; the screens below
+are captured from those builds. Desktop screenshots are not included yet.
+
+<div align="center">
+
+|                                              Onboarding                                              |                                             Dashboard                                              |                                                  Active timer                                                  |
+| :--------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------: |
+| <img src="docs/screenshots/android-onboarding.png" alt="PausIO onboarding on Android" width="220" /> | <img src="docs/screenshots/android-dashboard.png" alt="PausIO dashboard on Android" width="220" /> | <img src="docs/screenshots/android-active-timer.png" alt="PausIO active break timer on Android" width="220" /> |
+
+<img src="docs/screenshots/wear-os.png" alt="PausIO break reminder on a Wear OS watch face" width="200" />
+
+_Wear OS companion — an optional, private haptic nudge on the wrist._
+
+</div>
+
+---
+
 ## 🚧 Release Status
 
 PausIO is currently in **pre-release development**. There are no official production binaries yet. Build from source using the instructions below if you want to evaluate the project.
