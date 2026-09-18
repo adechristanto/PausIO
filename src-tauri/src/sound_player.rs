@@ -14,16 +14,7 @@ use pausio_core::SystemSound;
 pub fn notification_sound_name(sound: SystemSound) -> &'static str {
     #[cfg(target_os = "windows")]
     {
-        // tauri-winrt-notification's toast Sound vocabulary (IM, Mail,
-        // Reminder, SMS, Default, Alarm1-10, Call1-10) is closed and
-        // unrelated to the PlaySoundW aliases used by `play_system_sound`.
-        match sound {
-            SystemSound::Default => "Default",
-            SystemSound::Chime => "IM",
-            SystemSound::Ding => "Reminder",
-            SystemSound::Alert => "Alarm",
-            SystemSound::Complete => "Mail",
-        }
+        windows_toast_sound_name(sound)
     }
     #[cfg(target_os = "linux")]
     {
@@ -31,7 +22,21 @@ pub fn notification_sound_name(sound: SystemSound) -> &'static str {
     }
 }
 
-#[cfg(target_os = "linux")]
+// tauri-winrt-notification's toast Sound vocabulary (IM, Mail, Reminder, SMS,
+// Default, Alarm1-10, Call1-10) is closed and unrelated to the PlaySoundW
+// aliases used by `play_system_sound`/`windows_playsound_alias`.
+#[cfg(any(target_os = "windows", test))]
+fn windows_toast_sound_name(sound: SystemSound) -> &'static str {
+    match sound {
+        SystemSound::Default => "Default",
+        SystemSound::Chime => "IM",
+        SystemSound::Ding => "Reminder",
+        SystemSound::Alert => "Alarm",
+        SystemSound::Complete => "Mail",
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
 fn linux_theme_name(sound: SystemSound) -> &'static str {
     // freedesktop sound-naming-spec names, widely present in stock sound
     // themes: http://0pointer.de/public/sound-naming-spec.html
@@ -56,7 +61,7 @@ pub fn play_system_sound(sound: SystemSound) -> bool {
     return play_linux(sound);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 fn macos_system_sound_name(sound: SystemSound) -> &'static str {
     match sound {
         SystemSound::Default => "Tink",
@@ -100,21 +105,26 @@ fn play_macos_named(name: &str, volume: f32) -> bool {
     })
 }
 
-#[cfg(target_os = "windows")]
-fn play_windows(sound: SystemSound) -> bool {
-    use windows::Win32::Media::Audio::{PlaySoundW, SND_ALIAS, SND_ASYNC};
-    use windows::core::PCWSTR;
-
-    // Registry sound-scheme aliases under
-    // HKCU\AppEvents\Schemes\Apps\.Default\<Alias>\.Current — a different
-    // vocabulary from the toast-notification Sound enum used elsewhere.
-    let alias = match sound {
+// Registry sound-scheme aliases under
+// HKCU\AppEvents\Schemes\Apps\.Default\<Alias>\.Current — a different
+// vocabulary from the toast-notification Sound enum used elsewhere.
+#[cfg(any(target_os = "windows", test))]
+fn windows_playsound_alias(sound: SystemSound) -> &'static str {
+    match sound {
         SystemSound::Default => "SystemDefault",
         SystemSound::Chime => "SystemAsterisk",
         SystemSound::Ding => "SystemNotification",
         SystemSound::Alert => "SystemExclamation",
         SystemSound::Complete => "SystemQuestion",
-    };
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn play_windows(sound: SystemSound) -> bool {
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_ALIAS, SND_ASYNC};
+    use windows::core::PCWSTR;
+
+    let alias = windows_playsound_alias(sound);
     let mut wide: Vec<u16> = alias.encode_utf16().chain(std::iter::once(0)).collect();
     // SAFETY: `wide` is a valid, NUL-terminated UTF-16 buffer that outlives
     // this call; PlaySoundW with SND_ASYNC only needs it for the duration of
@@ -148,4 +158,80 @@ fn play_linux(sound: SystemSound) -> bool {
             .is_ok();
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        linux_theme_name, macos_system_sound_name, windows_playsound_alias,
+        windows_toast_sound_name,
+    };
+    use pausio_core::SystemSound;
+
+    const ALL_SOUNDS: [SystemSound; 5] = [
+        SystemSound::Default,
+        SystemSound::Chime,
+        SystemSound::Ding,
+        SystemSound::Alert,
+        SystemSound::Complete,
+    ];
+
+    /// Every mapping table must name a distinct sound per `SystemSound`
+    /// variant. A collision would make two different settings choices play
+    /// or notify identically, silently defeating the picker in Settings.
+    fn assert_all_distinct(names: [&'static str; 5]) {
+        for i in 0..names.len() {
+            for j in (i + 1)..names.len() {
+                assert_ne!(
+                    names[i], names[j],
+                    "sound names must be distinct per SystemSound variant, got duplicate {:?}",
+                    names[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn macos_sound_names_are_distinct_per_variant() {
+        assert_all_distinct(ALL_SOUNDS.map(macos_system_sound_name));
+    }
+
+    #[test]
+    fn windows_playsound_aliases_are_distinct_per_variant() {
+        assert_all_distinct(ALL_SOUNDS.map(windows_playsound_alias));
+    }
+
+    #[test]
+    fn windows_toast_sound_names_are_distinct_per_variant() {
+        assert_all_distinct(ALL_SOUNDS.map(windows_toast_sound_name));
+    }
+
+    #[test]
+    fn linux_theme_names_are_distinct_per_variant() {
+        assert_all_distinct(ALL_SOUNDS.map(linux_theme_name));
+    }
+
+    #[test]
+    fn default_sound_maps_to_the_documented_names() {
+        assert_eq!(macos_system_sound_name(SystemSound::Default), "Tink");
+        assert_eq!(
+            windows_playsound_alias(SystemSound::Default),
+            "SystemDefault"
+        );
+        assert_eq!(windows_toast_sound_name(SystemSound::Default), "Default");
+        assert_eq!(linux_theme_name(SystemSound::Default), "bell");
+    }
+
+    #[test]
+    fn windows_playsound_aliases_and_toast_names_use_separate_vocabularies() {
+        // These two Windows mappings are deliberately different closed
+        // vocabularies (PlaySoundW registry aliases vs. toast Sound enum);
+        // this guards against them accidentally being unified incorrectly.
+        for sound in ALL_SOUNDS {
+            assert_ne!(
+                windows_playsound_alias(sound),
+                windows_toast_sound_name(sound)
+            );
+        }
+    }
 }

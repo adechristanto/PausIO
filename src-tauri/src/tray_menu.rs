@@ -276,3 +276,36 @@ pub(crate) fn retranslate_tray(locale: Locale) {
 fn format_duration(seconds: u32) -> String {
     format!("{:02}:{:02}", seconds / 60, seconds % 60)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::format_duration;
+
+    #[test]
+    fn zero_seconds_is_zero_zero() {
+        assert_eq!(format_duration(0), "00:00");
+    }
+
+    #[test]
+    fn pads_single_digit_minutes_and_seconds() {
+        assert_eq!(format_duration(65), "01:05");
+    }
+
+    #[test]
+    fn exact_minute_has_zero_seconds() {
+        assert_eq!(format_duration(120), "02:00");
+    }
+
+    #[test]
+    fn does_not_truncate_minute_counts_past_two_digits() {
+        // The tray label has no fixed width budget for minutes, unlike
+        // the always-two-digit seconds field, so a long pause-for duration
+        // (e.g. two hours) must not be silently cut down to two digits.
+        assert_eq!(format_duration(7_384), "123:04");
+    }
+
+    #[test]
+    fn fifty_nine_seconds_does_not_round_up_to_the_next_minute() {
+        assert_eq!(format_duration(59), "00:59");
+    }
+}

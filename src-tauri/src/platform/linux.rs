@@ -165,3 +165,72 @@ pub(crate) fn sync_linux_session_lock(app: &tauri::AppHandle) {
 pub(crate) fn harden_break_overlay(_window: &tauri::WebviewWindow<tauri::Wry>) {}
 #[cfg(target_os = "linux")]
 pub(crate) fn soften_break_overlay(_window: &tauri::WebviewWindow<tauri::Wry>) {}
+
+#[cfg(test)]
+mod tests {
+    use super::{linux_idle_seconds_from, linux_session_locked_from};
+
+    #[test]
+    fn not_idle_reports_zero_seconds_without_needing_the_since_property() {
+        // `loginctl` omits IdleSinceHintMonotonic while IdleHint=no, so the
+        // parser must not require it in that branch.
+        assert_eq!(linux_idle_seconds_from("IdleHint=no\n", 500.0), Some(0));
+    }
+
+    #[test]
+    fn idle_seconds_is_elapsed_time_since_the_hint_went_idle() {
+        let properties = "IdleHint=yes\nIdleSinceHintMonotonic=2000000\n";
+        // uptime 12s, idle-since 2s (in monotonic microseconds) => idle for 10s.
+        assert_eq!(linux_idle_seconds_from(properties, 12.0), Some(10));
+    }
+
+    #[test]
+    fn idle_seconds_saturates_instead_of_underflowing_on_clock_skew() {
+        // If the idle-since timestamp is somehow after "now" (clock skew
+        // between reading /proc/uptime and the loginctl snapshot), the
+        // saturating subtraction must clamp to zero rather than wrap.
+        let properties = "IdleHint=yes\nIdleSinceHintMonotonic=5000000\n";
+        assert_eq!(linux_idle_seconds_from(properties, 1.0), Some(0));
+    }
+
+    #[test]
+    fn missing_idle_hint_is_unparseable() {
+        assert_eq!(linux_idle_seconds_from("SomeOtherProperty=1\n", 10.0), None);
+    }
+
+    #[test]
+    fn idle_true_without_a_since_timestamp_is_unparseable() {
+        assert_eq!(linux_idle_seconds_from("IdleHint=yes\n", 10.0), None);
+    }
+
+    #[test]
+    fn locked_hint_yes_is_locked() {
+        assert_eq!(linux_session_locked_from("LockedHint=yes\n"), Some(true));
+    }
+
+    #[test]
+    fn locked_hint_no_is_unlocked() {
+        assert_eq!(linux_session_locked_from("LockedHint=no\n"), Some(false));
+    }
+
+    #[test]
+    fn locked_hint_missing_is_unparseable() {
+        assert_eq!(linux_session_locked_from("IdleHint=no\n"), None);
+    }
+
+    #[test]
+    fn locked_hint_with_an_unrecognized_value_is_unparseable() {
+        // Defensive: a malformed or future logind value should not be
+        // silently coerced into either boolean.
+        assert_eq!(linux_session_locked_from("LockedHint=maybe\n"), None);
+    }
+
+    #[test]
+    fn multiline_properties_parse_each_field_independently() {
+        // Mirrors the real `loginctl show-session` output shape, which
+        // returns all requested properties in one multi-line block.
+        let properties = "IdleHint=yes\nIdleSinceHintMonotonic=1000000\nLockedHint=yes\n";
+        assert_eq!(linux_idle_seconds_from(properties, 3.0), Some(2));
+        assert_eq!(linux_session_locked_from(properties), Some(true));
+    }
+}

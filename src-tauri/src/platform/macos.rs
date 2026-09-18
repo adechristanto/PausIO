@@ -192,6 +192,62 @@ mod cg_window_list {
             false
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{BOUNDS_EPSILON, CGPoint, CGRect, CGSize, rects_equal};
+
+        fn rect(x: f64, y: f64, width: f64, height: f64) -> CGRect {
+            CGRect {
+                origin: CGPoint { x, y },
+                size: CGSize { width, height },
+            }
+        }
+
+        #[test]
+        fn identical_rects_are_equal() {
+            let a = rect(0.0, 0.0, 1920.0, 1080.0);
+            let b = rect(0.0, 0.0, 1920.0, 1080.0);
+            assert!(rects_equal(&a, &b));
+        }
+
+        #[test]
+        fn rects_within_the_rounding_epsilon_are_equal() {
+            // CGWindowListCopyWindowInfo bounds are integer-rounded, so a
+            // window reported a fraction of a point off from the display's
+            // exact bounds must still be treated as fullscreen.
+            let display = rect(0.0, 0.0, 1920.0, 1080.0);
+            let window = rect(0.4, -0.4, 1920.4, 1079.6);
+            assert!(rects_equal(&display, &window));
+        }
+
+        #[test]
+        fn rects_at_exactly_the_epsilon_boundary_are_not_equal() {
+            // `rects_equal` uses a strict `<`, so a difference of exactly
+            // BOUNDS_EPSILON must not be treated as a match.
+            let display = rect(0.0, 0.0, 1920.0, 1080.0);
+            let window = rect(BOUNDS_EPSILON, 0.0, 1920.0, 1080.0);
+            assert!(!rects_equal(&display, &window));
+        }
+
+        #[test]
+        fn a_maximized_but_non_fullscreen_window_is_not_equal_to_the_display() {
+            // A window that merely fills most of the screen (e.g. maximized
+            // with visible menu bar/dock) must not be mistaken for
+            // fullscreen — this is the core false-positive this comparison
+            // exists to avoid.
+            let display = rect(0.0, 0.0, 1920.0, 1080.0);
+            let maximized = rect(0.0, 25.0, 1920.0, 1030.0);
+            assert!(!rects_equal(&display, &maximized));
+        }
+
+        #[test]
+        fn a_smaller_secondary_display_is_not_confused_with_a_larger_one() {
+            let primary = rect(0.0, 0.0, 2560.0, 1440.0);
+            let secondary = rect(2560.0, 0.0, 1920.0, 1080.0);
+            assert!(!rects_equal(&primary, &secondary));
+        }
+    }
 }
 
 /// Raises a break overlay above the Dock and menu bar. Tauri's `always_on_top` maps to

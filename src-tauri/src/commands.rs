@@ -241,47 +241,64 @@ pub(crate) fn clear_history(app: AppHandle) -> ApiResult<()> {
 #[tauri::command]
 pub(crate) fn export_history(app: AppHandle, format: String) -> ApiResult<String> {
     let events = get_history(app)?;
-    match format.as_str() {
-        "json" => serde_json::to_string_pretty(&events).map_err(internal_error),
-        "csv" => {
-            let mut output = String::from(
-                "schema_version,break_id,occurred_at,kind,break_kind,context,target_break_seconds,work_interval_seconds,schedule_fingerprint\n",
-            );
-            for event in events {
-                let escape = |value: String| format!("\"{}\"", value.replace('"', "\"\""));
-                output.push_str(&format!(
-                    "{},{},{},{},{},{},{},{},{}\n",
-                    event.schema_version,
-                    escape(event.break_id.unwrap_or_default()),
-                    escape(event.occurred_at.to_rfc3339()),
-                    escape(format!("{:?}", event.kind).to_lowercase()),
-                    escape(
-                        event
-                            .break_kind
-                            .map(|kind| format!("{kind:?}").to_lowercase())
-                            .unwrap_or_default()
-                    ),
-                    escape(
-                        event
-                            .context
-                            .map(|context| format!("{context:?}").to_lowercase())
-                            .unwrap_or_default()
-                    ),
-                    event
-                        .target_break_seconds
-                        .map(|value| value.to_string())
-                        .unwrap_or_default(),
-                    event
-                        .work_interval_seconds
-                        .map(|value| value.to_string())
-                        .unwrap_or_default(),
-                    escape(event.schedule_fingerprint.unwrap_or_default()),
-                ));
-            }
-            Ok(output)
-        }
-        _ => Err(internal_error("history export format must be json or csv")),
+    format_history_export(&events, &format).ok_or_else(|| {
+        // format_history_export only returns None for an unrecognized format
+        // string; a real serialization failure from serde_json::Error takes
+        // the Err(String) branch below instead and is surfaced as-is.
+        internal_error("history export format must be json or csv")
+    })?
+}
+
+/// Pure history-export formatting, split out from [`export_history`] so the
+/// CSV escaping and column layout can be unit tested without a Tauri store.
+/// Returns `None` for an unrecognized `format`; `Some(Err(_))` only for a
+/// genuine `serde_json` serialization failure on the "json" path.
+fn format_history_export(events: &[HistoryEvent], format: &str) -> Option<ApiResult<String>> {
+    match format {
+        "json" => Some(serde_json::to_string_pretty(events).map_err(internal_error)),
+        "csv" => Some(Ok(history_events_to_csv(events))),
+        _ => None,
     }
+}
+
+fn history_events_to_csv(events: &[HistoryEvent]) -> String {
+    let mut output = String::from(
+        "schema_version,break_id,occurred_at,kind,break_kind,context,target_break_seconds,work_interval_seconds,schedule_fingerprint\n",
+    );
+    for event in events {
+        let escape = |value: String| format!("\"{}\"", value.replace('"', "\"\""));
+        output.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{}\n",
+            event.schema_version,
+            escape(event.break_id.clone().unwrap_or_default()),
+            escape(event.occurred_at.to_rfc3339()),
+            escape(format!("{:?}", event.kind).to_lowercase()),
+            escape(
+                event
+                    .break_kind
+                    .as_ref()
+                    .map(|kind| format!("{kind:?}").to_lowercase())
+                    .unwrap_or_default()
+            ),
+            escape(
+                event
+                    .context
+                    .as_ref()
+                    .map(|context| format!("{context:?}").to_lowercase())
+                    .unwrap_or_default()
+            ),
+            event
+                .target_break_seconds
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            event
+                .work_interval_seconds
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            escape(event.schedule_fingerprint.clone().unwrap_or_default()),
+        ));
+    }
+    output
 }
 
 /// Erases PausIO's durable state on this device. This intentionally does not
@@ -783,4 +800,106 @@ fn platform_context_signal() -> Option<ContextReason> {
 #[cfg(target_os = "windows")]
 fn platform_context_signal() -> Option<ContextReason> {
     crate::platform::windows::platform_context_signal()
+}
+
+#[cfg(test)]
+mod format_history_export_tests {
+    use chrono::{TimeZone, Utc};
+    use pausio_protocol::{BreakKind, ContextReason};
+
+    use super::{format_history_export, history_events_to_csv};
+    use crate::store::{HistoryEvent, HistoryEventKind};
+
+    fn sample_event() -> HistoryEvent {
+        HistoryEvent {
+            schema_version: 4,
+            break_id: Some("break-1".into()),
+            occurred_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            kind: HistoryEventKind::Completed,
+            break_kind: Some(BreakKind::Short),
+            context: Some(ContextReason::Meeting),
+            target_break_seconds: Some(20),
+            work_interval_seconds: Some(1200),
+            schedule_fingerprint: Some("fp-1".into()),
+        }
+    }
+
+    #[test]
+    fn unrecognized_format_returns_none() {
+        assert!(format_history_export(&[], "xml").is_none());
+    }
+
+    #[test]
+    fn json_format_round_trips_through_serde() {
+        let events = vec![sample_event()];
+        let result = format_history_export(&events, "json").expect("json is a known format");
+        let json = result.expect("serializing a valid event must not fail");
+        assert!(json.contains("\"break_id\": \"break-1\""));
+        assert!(json.contains("\"kind\": \"completed\""));
+    }
+
+    #[test]
+    fn csv_header_lists_every_column_in_order() {
+        let csv = history_events_to_csv(&[]);
+        assert_eq!(
+            csv,
+            "schema_version,break_id,occurred_at,kind,break_kind,context,target_break_seconds,work_interval_seconds,schedule_fingerprint\n"
+        );
+    }
+
+    #[test]
+    fn csv_row_matches_the_header_column_order_and_lowercases_enum_variants() {
+        let csv = history_events_to_csv(&[sample_event()]);
+        let expected_row = "4,\"break-1\",\"2026-01-02T03:04:05+00:00\",\"completed\",\"short\",\"meeting\",20,1200,\"fp-1\"\n";
+        assert_eq!(
+            csv,
+            format!(
+                "schema_version,break_id,occurred_at,kind,break_kind,context,target_break_seconds,work_interval_seconds,schedule_fingerprint\n{expected_row}"
+            )
+        );
+    }
+
+    #[test]
+    fn csv_handles_none_fields_as_empty_columns_not_the_literal_word_none() {
+        let event = HistoryEvent {
+            schema_version: 4,
+            break_id: None,
+            occurred_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+            kind: HistoryEventKind::Skipped,
+            break_kind: None,
+            context: None,
+            target_break_seconds: None,
+            work_interval_seconds: None,
+            schedule_fingerprint: None,
+        };
+        let csv = history_events_to_csv(&[event]);
+        let row = csv.lines().nth(1).expect("one data row");
+        assert_eq!(
+            row,
+            "4,\"\",\"2026-01-01T00:00:00+00:00\",\"skipped\",\"\",\"\",,,\"\""
+        );
+    }
+
+    #[test]
+    fn csv_escapes_embedded_double_quotes_in_string_fields() {
+        // break_id and schedule_fingerprint are free-form strings; a value
+        // containing a double quote must be escaped per RFC 4180 (doubled),
+        // not passed through raw, or the row would corrupt the CSV column
+        // boundary for every reader.
+        let mut event = sample_event();
+        event.break_id = Some("weird\"id".into());
+        let csv = history_events_to_csv(&[event]);
+        assert!(csv.contains("\"weird\"\"id\""));
+    }
+
+    #[test]
+    fn csv_emits_one_row_per_event_in_input_order() {
+        let mut second = sample_event();
+        second.break_id = Some("break-2".into());
+        let csv = history_events_to_csv(&[sample_event(), second]);
+        let rows: Vec<&str> = csv.lines().skip(1).collect();
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].contains("break-1"));
+        assert!(rows[1].contains("break-2"));
+    }
 }
