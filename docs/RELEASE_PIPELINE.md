@@ -1,12 +1,27 @@
-# Release pipeline — signing, updater, and distribution channels
+# Release pipeline: signing, updater, and distribution channels
 
-**Status:** Unsigned release-candidate automation exists, but production distribution is not implemented. The workflow creates a private draft release only. Publishing still requires owner-controlled accounts, platform certificates, signing/notarization, physical-device verification, and a decision about update hosting.
+Status: unsigned release-candidate automation exists, but production distribution is not
+implemented. The workflow creates a private draft release only. Publishing still requires
+owner-controlled accounts, platform certificates, signing/notarization, physical-device
+verification, and a decision about update hosting.
 
-`bundle.targets` in `src-tauri/tauri.conf.json` is now `"all"` (was `["app", "dmg"]`), so `pnpm tauri build` locally already produces every installer format Tauri supports for the host OS (`.app`/`.dmg` on macOS, `.msi`/`.nsis` on Windows, `.deb`/`.rpm`/`.appimage` on Linux) without needing this checklist — that part is done. Everything below is what turns those into installers a person can actually trust and auto-update.
+`bundle.targets` in `src-tauri/tauri.conf.json` is `"all"`, so `pnpm tauri build` locally
+already produces every installer format Tauri supports for the host OS (`.app`/`.dmg` on
+macOS, `.msi`/`.nsis` on Windows, `.deb`/`.rpm`/`.appimage` on Linux). Everything below is
+what turns those unsigned bundles into installers a person can actually trust and
+auto-update.
 
 ## 1. macOS: Developer ID signing + notarization
 
-**Status: CI-side scaffolding is done.** `.github/workflows/release.yml`'s `desktop` job now imports a certificate into a temporary keychain and passes `APPLE_SIGNING_IDENTITY`/`APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID` to `pnpm tauri build` (Tauri's bundler reads these and calls `notarytool` itself — no separate manual step). `src-tauri/entitlements.plist` exists (empty — PausIO requests no special entitlements) and `bundle.macOS.hardenedRuntime`/`entitlements` are set in `tauri.conf.json`. **This produces an unsigned build exactly as before until the secrets below are added** — the import step and the four env vars are each conditioned on the corresponding secret being set, so a fork or a maintainer who hasn't done steps 1-2 yet sees no behavior change.
+CI scaffolding exists: `.github/workflows/release.yml`'s `desktop` job imports a
+certificate into a temporary keychain and passes `APPLE_SIGNING_IDENTITY`/`APPLE_ID`/
+`APPLE_PASSWORD`/`APPLE_TEAM_ID` to `pnpm tauri build` (Tauri's bundler reads these and
+calls `notarytool` itself; no separate manual step). `src-tauri/entitlements.plist`
+exists (empty; PausIO requests no special entitlements) and
+`bundle.macOS.hardenedRuntime`/`entitlements` are set in `tauri.conf.json`. This still
+produces an unsigned build until the secrets below are added: the import step and the
+four env vars are each conditioned on the corresponding secret being set, so a fork or a
+maintainer who hasn't completed the steps below sees no behavior change.
 
 What still requires the maintainer to act, outside of any code change:
 
@@ -15,7 +30,7 @@ What still requires the maintainer to act, outside of any code change:
 3. Add these as GitHub repo secrets (Settings → Secrets and variables → Actions):
    - `APPLE_CERTIFICATE` — the `.p12`, base64-encoded (`base64 -i cert.p12 | pbcopy`)
    - `APPLE_CERTIFICATE_PASSWORD` — the password used when exporting the `.p12`
-   - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Your Name (TEAMID)`
+   - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Example Maintainer (ABCDE12345)`
    - `APPLE_ID` — the Apple ID enrolled in the Developer Program
    - `APPLE_APP_SPECIFIC_PASSWORD` — an [app-specific password](https://support.apple.com/en-us/102654) for that Apple ID, not the account password
    - `APPLE_TEAM_ID` — the 10-character Team ID from the Developer portal
@@ -39,14 +54,14 @@ Two viable paths — pick one:
    ```json
    "plugins": {
      "updater": {
-       "pubkey": "<public key from step 1>",
+       "pubkey": "<public key generated in step 1>",
        "endpoints": ["https://github.com/adechristanto/PausIO/releases/latest/download/latest.json"]
      }
    },
    "bundle": { "createUpdaterArtifacts": true }
    ```
    (The GitHub-releases endpoint above is the simplest option: point at a `latest.json` asset attached to each release. Any static host works equally well if self-hosting is preferred instead.)
-3. Add `tauri-plugin-updater = "2"` to `src-tauri/Cargo.toml` under the existing desktop-only target block, register `tauri_plugin_updater::Builder::new().build()` in `run()`, and add a `check_for_updates` command plus a Settings toggle (default **off**, matching Stretchly's `disableAppUpdateFeatures` precedent for the same reason: update checks are PausIO's only network egress, and that must stay opt-in given the app's local-first/no-telemetry posture). Surface the toggle in Settings with the exact endpoint documented in-app, so nothing calls home invisibly.
+3. Add `tauri-plugin-updater = "2"` to `src-tauri/Cargo.toml` under the existing desktop-only target block, register `tauri_plugin_updater::Builder::new().build()` in `run()`, and add a `check_for_updates` command plus a Settings toggle, default off. Update checks would be PausIO's only network egress, so that must stay opt-in given the app's local-first/no-telemetry posture (other break timers such as Stretchly default this off for the same reason). Surface the toggle in Settings with the exact endpoint documented in-app, so nothing calls home invisibly.
 4. Store the private key (`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has a password) as GitHub Actions secrets — the release workflow needs them to sign each build's artifacts and generate `latest.json`.
 
 ## 4. Release GitHub Actions workflow
@@ -69,9 +84,14 @@ Treat the resulting files as engineering artifacts, not public installers. Befor
 6. Confirm the tag version matches every package and application manifest.
 7. Regenerate checksums after replacing any artifact.
 8. Review the generated notes, mark the release non-prerelease only when appropriate, and publish manually.
-9. Work through `docs/LIFECYCLE_TEST_MATRIX.md` (lock/unlock, sleep/wake, restart, login-startup, display changes) on each platform and record the result before this draft is published.
+9. Work through `LIFECYCLE_TEST_MATRIX.md` in this directory (lock/unlock, sleep/wake, restart, login-startup, display changes) on each platform and record the result before this draft is published.
 
-**Already verified, does not need re-checking:** the embedded WebDriver test server (`tauri_plugin_wdio_webdriver`) is compiled in only under the `e2e-webdriver` Cargo feature, which this workflow's `pnpm tauri build` never enables, and it additionally requires a runtime `--e2e` flag at launch (`src-tauri/src/lib.rs`) — release artifacts never carry it.
+The embedded WebDriver test server (`tauri_plugin_wdio_webdriver`) is compiled in only
+under the `e2e-webdriver` Cargo feature, which this workflow's `pnpm tauri build` never
+enables, and additionally requires a runtime `--e2e` flag at launch
+(`src-tauri/src/lib.rs`). Release artifacts never carry it; this is enforced at the
+`Cargo.toml` feature level, not by convention, so it does not need re-checking per
+release.
 
 When signing secrets exist, prefer the official Tauri release tooling or an equivalently reviewed, commit-pinned workflow. Never place signing material or updater private keys in the repository.
 
@@ -82,8 +102,8 @@ Each of these is a separate submission/approval process, not a code change:
 - **Homebrew tap**: create a new repo `homebrew-pausio`, add a cask formula pointing at the signed/notarized `.dmg` release asset (mirrors [hovancik/homebrew-stretchly](https://github.com/hovancik/homebrew-stretchly)). Fully self-service, no approval needed.
 - **winget**: submit a manifest PR to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) pointing at the signed `.msi`/`.exe`. Requires the Windows binary to be code-signed first (§2) — winget review rejects unsigned installers.
 - **Chocolatey**: package and push to the Chocolatey community repository; requires a Chocolatey account and moderation review.
-- **Flathub**: write a Flatpak manifest (`com.pausio.app.yml`), submit to [flathub/flathub](https://github.com/flathub/flathub) for review. Flatpak sandboxing will need explicit portal permissions declared for tray icon (`org.freedesktop.StatusNotifierItem` via `xdg-desktop-portal`) and autostart (`xdg-desktop-portal`'s Background portal) — both are sandboxed differently than the current native GTK path, so this needs its own testing pass once Linux CI exists (see `docs/LINUX_WAYLAND_PLAN.md`).
+- **Flathub**: write a Flatpak manifest (`com.pausio.app.yml`), submit to [flathub/flathub](https://github.com/flathub/flathub) for review. Flatpak sandboxing needs explicit portal permissions declared for the tray icon (`org.freedesktop.StatusNotifierItem` via `xdg-desktop-portal`) and autostart (`xdg-desktop-portal`'s Background portal); both are sandboxed differently than the current native GTK path, so this needs its own testing pass once the Linux/Wayland work in `LINUX_WAYLAND_PLAN.md` lands.
 - **Snapcraft**: write a `snapcraft.yaml`, register the `pausio` name on the Snap Store, push via `snapcraft upload`.
 - **AUR**: write a `PKGBUILD`, submit as a new AUR package (self-service, no review, but community trust accrues over time).
 
-Recommended order: Homebrew tap first (fastest, no review gate, matches Stretchly's own primary distribution channel), then winget once Windows signing is in place, then Flathub/Snap/AUR as Linux packaging matures alongside the work in `docs/LINUX_WAYLAND_PLAN.md`.
+Recommended order: Homebrew tap first (fastest, no review gate), then winget once Windows signing is in place, then Flathub/Snap/AUR as Linux packaging matures alongside the work in `LINUX_WAYLAND_PLAN.md`.
