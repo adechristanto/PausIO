@@ -49,7 +49,7 @@ jobs:
         with:
           toolchain: 1.93.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - uses: taiki-e/install-action@9534c84618278caac52cb373bb164ed464dbd8af # v2.87.11
         with:
           tool: cargo-llvm-cov
@@ -93,7 +93,7 @@ jobs:
           toolchain: 1.93.0
           components: rustfmt, clippy
           targets: x86_64-linux-android, aarch64-apple-ios-sim
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # v4 is required: v3 defaults `packages` to "tools platform-tools", and
       # the obsolete `tools` package no longer exists in Google's SDK
       # repository, so sdkmanager exits 1 with "Failed to find package 'tools'".
@@ -141,7 +141,7 @@ jobs:
         with:
           toolchain: 1.93.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Install Linux WebKit and tray build dependencies
         if: runner.os == 'Linux'
         run: |
