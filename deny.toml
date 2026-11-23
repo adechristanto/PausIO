@@ -11,21 +11,6 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 ignore = [
-  # gtk-rs GTK3 bindings (RUSTSEC-2024-0411 through -0420) are unmaintained.
-  # Tauri v2 on Linux has a hard dependency on GTK3 via wry/webkit2gtk; there
-  # is no migration path short of Tauri itself moving to GTK4. These are
-  # maintenance-status advisories, not known vulnerabilities. Revisit when
-  # Tauri ships a GTK4 backend.
-  "RUSTSEC-2024-0411",
-  "RUSTSEC-2024-0412",
-  "RUSTSEC-2024-0413",
-  "RUSTSEC-2024-0414",
-  "RUSTSEC-2024-0415",
-  "RUSTSEC-2024-0416",
-  "RUSTSEC-2024-0417",
-  "RUSTSEC-2024-0418",
-  "RUSTSEC-2024-0419",
-  "RUSTSEC-2024-0420",
   # `unic-ucd-version` is unmaintained, reached via urlpattern -> tauri-utils.
   # No safe upgrade exists upstream yet; tracked by the Tauri project.
   "RUSTSEC-2025-0098",
